@@ -182,7 +182,8 @@ export class StackGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     try {
       const Dockerode = require('dockerode');
-      const docker = new Dockerode();
+      const { getDockerClient } = require('../common/docker-client');
+      const docker = getDockerClient();
       const stream = await docker.pull(data.name);
       docker.modem.followProgress(stream, (err: any) => {
         if (err) client.emit('error', { message: err.message });

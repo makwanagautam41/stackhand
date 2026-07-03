@@ -6,8 +6,6 @@ import { resolveSafePath } from '../common/resolve-path';
 
 @Injectable()
 export class FilesystemService {
-  private allowedExtensions = ['.yml', '.yaml', '.env'];
-
   browse(basePath: string, subPath?: string) {
     const target = subPath ? resolveSafePath(basePath, subPath) : path.resolve(basePath);
     this.ensureExists(target);
@@ -47,10 +45,9 @@ export class FilesystemService {
           .filter(e => e.name !== '.git' && e.name !== 'node_modules')
           .map(e => buildTree(path.join(currentPath, e.name)));
       } else {
-        const ext = path.extname(currentPath).toLowerCase();
-        if (this.allowedExtensions.includes(ext)) {
+        try {
           node.content = fs.readFileSync(currentPath, 'utf-8');
-        } else {
+        } catch {
           node.content = 'Binary or unsupported file';
         }
       }
@@ -61,10 +58,6 @@ export class FilesystemService {
   }
 
   readFile(filePath: string) {
-    const ext = path.extname(filePath).toLowerCase();
-    if (!this.allowedExtensions.includes(ext)) {
-      throw new BadRequestException(`Only ${this.allowedExtensions.join(', ')} files are allowed`);
-    }
     this.ensureExists(filePath);
     const content = fs.readFileSync(filePath, 'utf-8');
     return { path: filePath, content };

@@ -1,22 +1,63 @@
 import { useEffect, useRef, useState } from "react";
-import { MOCK_LOG_LINES } from "@/lib/mock-data";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-export function LogsViewer({ name }: { name: string }) {
-  const [lines, setLines] = useState<string[]>(() =>
-    MOCK_LOG_LINES.slice(0, 8).map((l) => `${new Date().toISOString()} ${name} | ${l}`),
-  );
+export function LogsViewer({
+  name,
+  containerId,
+  stackId,
+}: {
+  name: string;
+  containerId?: string;
+  stackId?: string;
+}) {
+  const [lines, setLines] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    const t = setInterval(() => {
-      setLines((prev) => {
-        const next = MOCK_LOG_LINES[Math.floor(Math.random() * MOCK_LOG_LINES.length)];
-        return [...prev, `${new Date().toISOString()} ${name} | ${next}`].slice(-200);
-      });
-    }, 1200);
-    return () => clearInterval(t);
-  }, [name]);
+    let cancelled = false;
+
+    const fetchLogs = async () => {
+      try {
+        let logData = "";
+        if (containerId) {
+          const data = await api.containerLogs(containerId, 200);
+          logData = data;
+        } else if (stackId) {
+          const data = await api.getStackLogs(stackId, 200);
+          logData = data.stdout || data.stderr || "";
+        }
+
+        if (!cancelled) {
+          const parsed = logData
+            .split("\n")
+            .filter(Boolean)
+            .slice(-200);
+          setLines(parsed);
+          setLoading(false);
+          setError(null);
+        }
+      } catch (e: any) {
+        if (!cancelled) {
+          setError(e.message);
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchLogs();
+
+    // Poll for new logs
+    intervalRef.current = setInterval(fetchLogs, 3000);
+
+    return () => {
+      cancelled = true;
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [containerId, stackId]);
 
   useEffect(() => {
     ref.current?.scrollTo({ top: ref.current.scrollHeight });
@@ -34,8 +75,13 @@ export function LogsViewer({ name }: { name: string }) {
       </div>
       <div
         ref={ref}
-        className="h-[360px] overflow-y-auto p-3 text-mono scrollbar-thin"
+        className="h-[360px] overflow-y-auto p-3 font-mono text-xs leading-5 scrollbar-thin"
       >
+        {loading && <div className="text-white/40">Loading logs…</div>}
+        {error && <div className="text-red-400">Error: {error}</div>}
+        {!loading && !error && lines.length === 0 && (
+          <div className="text-white/40">No logs available</div>
+        )}
         {lines.map((l, i) => (
           <div
             key={i}
@@ -43,6 +89,8 @@ export function LogsViewer({ name }: { name: string }) {
               "whitespace-pre-wrap",
               l.includes("[ERROR]") && "text-red-400",
               l.includes("[WARN]") && "text-amber-300",
+              l.includes("error") && "text-red-400",
+              l.includes("Error") && "text-red-400",
             )}
           >
             {l}

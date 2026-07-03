@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import Dockerode from 'dockerode';
 import { getDockerClient } from '../common/docker-client';
+import * as cp from 'child_process';
 
 const docker = getDockerClient();
 
@@ -83,5 +84,20 @@ export class ContainerService {
       memLimit,
       network: stats.networks,
     };
+  }
+
+  async logs(id: string, tail = 200): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const child = cp.spawn('docker', ['logs', '--tail', String(tail), '--timestamps', id]);
+      let stdout = '';
+      let stderr = '';
+      child.stdout?.on('data', (d: Buffer) => { stdout += d.toString(); });
+      child.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });
+      child.on('close', (code) => {
+        const output = stdout + stderr;
+        resolve(output || 'No logs available');
+      });
+      child.on('error', (e) => reject(e));
+    });
   }
 }

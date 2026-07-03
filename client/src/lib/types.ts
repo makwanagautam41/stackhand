@@ -217,6 +217,16 @@ export interface DashboardData {
   recentActivity: ActivityEvent[];
 }
 
+export interface DockerStatus {
+  running: boolean;
+  version: string | null;
+  containers: number;
+  runningContainers: number;
+  images: number;
+  os: string | null;
+  architecture: string | null;
+}
+
 export interface OllamaStatus {
   connected: boolean;
   error?: string;

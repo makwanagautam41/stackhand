@@ -58,7 +58,7 @@ function StackDetail() {
   } = useWorkspaces();
   const [showSecrets, setShowSecrets] = useState(false);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
-  const [logsFor, setLogsFor] = useState<string | null>(null);
+  const [logsFor, setLogsFor] = useState<{ name: string; containerId?: string } | null>(null);
 
   if (!current) return null;
   const stack = (stacksByWs[current.id] ?? []).find((s) => s.id === stackId);
@@ -184,7 +184,7 @@ function StackDetail() {
                         <Button size="icon" variant="ghost" className="rounded-md" onClick={() => runContainer(c.id, "restart")}>
                           <IconRefresh className="h-4 w-4" stroke={1.75} />
                         </Button>
-                        <Button size="icon" variant="ghost" className="rounded-md" onClick={() => setLogsFor(c.name)}>
+                        <Button size="icon" variant="ghost" className="rounded-md" onClick={() => setLogsFor({ name: c.name, containerId: c.id })}>
                           <IconTerminal2 className="h-4 w-4" stroke={1.75} />
                         </Button>
                       </div>
@@ -282,10 +282,10 @@ function StackDetail() {
       <Sheet open={!!logsFor} onOpenChange={(v) => !v && setLogsFor(null)}>
         <SheetContent side="right" className="w-full sm:max-w-2xl">
           <SheetHeader>
-            <SheetTitle className="font-mono">Logs · {logsFor}</SheetTitle>
-            <SheetDescription>Live stream via WebSocket</SheetDescription>
+            <SheetTitle className="font-mono">Logs · {logsFor?.name}</SheetTitle>
+            <SheetDescription>Real container logs</SheetDescription>
           </SheetHeader>
-          <div className="mt-4">{logsFor && <LogsViewer name={logsFor} />}</div>
+          <div className="mt-4">{logsFor && <LogsViewer name={logsFor.name} containerId={logsFor.containerId} stackId={stack.id} />}</div>
         </SheetContent>
       </Sheet>
     </div>

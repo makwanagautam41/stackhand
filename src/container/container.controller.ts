@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Delete, Param } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Post, Delete, Param, Query } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { ContainerService } from './container.service';
 
 @ApiTags('Containers')
@@ -35,4 +35,9 @@ export class ContainerController {
   @Get(':id/stats')
   @ApiOperation({ summary: 'Get container stats (CPU, memory)' })
   stats(@Param('id') id: string) { return this.service.stats(id); }
+
+  @Get(':id/logs')
+  @ApiOperation({ summary: 'Get container logs' })
+  @ApiQuery({ name: 'tail', required: false })
+  logs(@Param('id') id: string, @Query('tail') tail?: string) { return this.service.logs(id, tail ? parseInt(tail) : 200); }
 }

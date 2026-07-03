@@ -71,8 +71,8 @@ function ContainersPage() {
   const [filter, setFilter] = useState<"all" | "running" | "exited" | "created">("all");
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState<Record<string, boolean>>({});
-  const [logsFor, setLogsFor] = useState<string | null>(null);
   const [removeFor, setRemoveFor] = useState<DockerContainer | null>(null);
+  const [logsForContainer, setLogsForContainer] = useState<DockerContainer | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchContainers = async (silent = false) => {
@@ -262,7 +262,7 @@ function ContainersPage() {
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={() => setLogsFor(c.name)}
+                          onClick={() => setLogsForContainer(c)}
                           title="Logs"
                         >
                           <Terminal className="h-4 w-4" />
@@ -299,12 +299,12 @@ function ContainersPage() {
       </Card>
 
       {/* Logs sheet */}
-      <Sheet open={!!logsFor} onOpenChange={(v) => !v && setLogsFor(null)}>
+      <Sheet open={!!logsForContainer} onOpenChange={(v) => !v && setLogsForContainer(null)}>
         <SheetContent side="right" className="w-full sm:max-w-2xl">
           <SheetHeader>
-            <SheetTitle>Logs · {logsFor}</SheetTitle>
+            <SheetTitle>Logs · {logsForContainer?.name}</SheetTitle>
           </SheetHeader>
-          <div className="mt-4">{logsFor && <LogsViewer name={logsFor} />}</div>
+          <div className="mt-4">{logsForContainer && <LogsViewer name={logsForContainer.name} containerId={logsForContainer.id} />}</div>
         </SheetContent>
       </Sheet>
 

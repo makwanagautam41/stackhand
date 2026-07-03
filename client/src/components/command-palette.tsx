@@ -12,16 +12,16 @@ import {
 import {
   Bell,
   Bot,
-  Code2,
+  Database,
   Download,
   FileText,
   FolderTree,
   Gauge,
+  Image as ImageIcon,
   LayoutDashboard,
   Layers,
   Network,
   Plus,
-  ScrollText,
   Settings,
   LayoutTemplate,
   Container as ContainerIcon,
@@ -68,9 +68,6 @@ export function CommandPalette({
           <CommandItem onSelect={() => go(() => navigate({ to: "/metrics" }))}>
             <Gauge className="mr-2 h-4 w-4" /> Metrics
           </CommandItem>
-          <CommandItem onSelect={() => go(() => navigate({ to: "/logs" }))}>
-            <ScrollText className="mr-2 h-4 w-4" /> Logs
-          </CommandItem>
           <CommandItem onSelect={() => go(() => navigate({ to: "/alerts" }))}>
             <Bell className="mr-2 h-4 w-4" /> Alerts
           </CommandItem>
@@ -79,6 +76,12 @@ export function CommandPalette({
           </CommandItem>
           <CommandItem onSelect={() => go(() => navigate({ to: "/containers" }))}>
             <ContainerIcon className="mr-2 h-4 w-4" /> Containers
+          </CommandItem>
+          <CommandItem onSelect={() => go(() => navigate({ to: "/images" }))}>
+            <ImageIcon className="mr-2 h-4 w-4" /> Images
+          </CommandItem>
+          <CommandItem onSelect={() => go(() => navigate({ to: "/volumes" }))}>
+            <Database className="mr-2 h-4 w-4" /> Volumes
           </CommandItem>
           <CommandItem onSelect={() => go(() => navigate({ to: "/templates" }))}>
             <LayoutTemplate className="mr-2 h-4 w-4" /> Templates
@@ -95,8 +98,11 @@ export function CommandPalette({
           <CommandItem onSelect={() => go(() => navigate({ to: "/env" }))}>
             <FileText className="mr-2 h-4 w-4" /> Env files
           </CommandItem>
-          <CommandItem onSelect={() => go(() => navigate({ to: "/snippets" }))}>
-            <Code2 className="mr-2 h-4 w-4" /> Snippets
+          <CommandItem onSelect={() => go(() => navigate({ to: "/images" }))}>
+            <ImageIcon className="mr-2 h-4 w-4" /> Images
+          </CommandItem>
+          <CommandItem onSelect={() => go(() => navigate({ to: "/setup" }))}>
+            <Settings className="mr-2 h-4 w-4" /> Setup
           </CommandItem>
           <CommandItem onSelect={() => go(() => navigate({ to: "/ai" }))}>
             <Bot className="mr-2 h-4 w-4" /> AI Assistant

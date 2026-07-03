@@ -9,6 +9,7 @@ import type {
   GenerateStackResponse,
   RegistryImage,
 } from "./types";
+import type { DockerStatus, YamlFile } from "./types";
 
 const TOKEN_KEY = "stackhand-api-token";
 
@@ -308,6 +309,10 @@ export const api = {
     return request<any>(`/containers/${id}/stats`);
   },
 
+  async containerLogs(id: string, tail = 200) {
+    return request<string>(`/containers/${id}/logs?tail=${tail}`);
+  },
+
   // ---- Images ----
   async listImages() {
     return request<BackendImage[]>("/images");
@@ -332,6 +337,23 @@ export const api = {
     return request<{ message: string }>(`/images/${encodeURIComponent(name)}`, { method: "DELETE" });
   },
 
+  // ---- Volumes ----
+  async listVolumes() {
+    return request<{ name: string; driver: string; mountpoint: string; scope: string; size: number; refCount: number; created: string; labels: Record<string, string> }[]>("/volumes");
+  },
+
+  async inspectVolume(name: string) {
+    return request<any>(`/volumes/${encodeURIComponent(name)}`);
+  },
+
+  async removeVolume(name: string) {
+    return request<{ message: string }>(`/volumes/${encodeURIComponent(name)}`, { method: "DELETE" });
+  },
+
+  async pruneVolumes() {
+    return request<{ message: string; reclaimed: number }>("/volumes/prune", { method: "POST" });
+  },
+
   // ---- Ollama ----
   async ollamaStatus() {
     return request<OllamaStatus>("/ollama/status");
@@ -353,6 +375,32 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ description }),
     });
+  },
+
+  // ---- Docker ----
+  async dockerStatus() {
+    return request<DockerStatus>("/docker/status");
+  },
+
+  async dockerPing() {
+    return request<{ alive: boolean }>("/docker/ping");
+  },
+
+  // ---- Backups ----
+  async backupWorkspace(workspaceId: string) {
+    return request<{ message: string; path: string; timestamp: string; files: number }>(`/workspaces/${workspaceId}/backup`, { method: "POST" });
+  },
+
+  async listBackups(workspaceId: string) {
+    return request<{ name: string; path: string; createdAt: string; fileCount: number; size: number }[]>(`/workspaces/${workspaceId}/backups`);
+  },
+
+  async restoreBackup(workspaceId: string, snapshotName: string) {
+    return request<{ message: string; path: string }>(`/workspaces/${workspaceId}/backups/${snapshotName}/restore`, { method: "POST" });
+  },
+
+  async deleteBackup(workspaceId: string, snapshotName: string) {
+    return request<{ message: string }>(`/workspaces/${workspaceId}/backups/${snapshotName}`, { method: "DELETE" });
   },
 
   // ---- Dashboard ----

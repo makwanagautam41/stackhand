@@ -2,6 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import {
   IconBrandDocker,
   IconDashboard,
+  IconDatabase,
   IconFileCode,
   IconRobot,
   IconSettings,
@@ -11,10 +12,10 @@ import {
   IconGauge,
   IconBell,
   IconFileText,
-  IconCode,
   IconCloudDownload,
   IconNetwork,
-  IconLogs,
+  IconPhoto,
+  IconDeviceDesktopAnalytics,
 } from "@tabler/icons-react";
 import {
   Sidebar,
@@ -36,7 +37,6 @@ const GROUPS = [
     items: [
       { title: "Dashboard", to: "/dashboard", icon: IconDashboard },
       { title: "Metrics", to: "/metrics", icon: IconGauge },
-      { title: "Logs", to: "/logs", icon: IconLogs },
       { title: "Alerts", to: "/alerts", icon: IconBell },
     ],
   },
@@ -45,6 +45,8 @@ const GROUPS = [
     items: [
       { title: "Stacks", to: "/stacks", icon: IconStack2 },
       { title: "Containers", to: "/containers", icon: IconBrandDocker },
+      { title: "Images", to: "/images", icon: IconPhoto },
+      { title: "Volumes", to: "/volumes", icon: IconDatabase },
       { title: "Templates", to: "/templates", icon: IconTemplate },
       { title: "Registry", to: "/registry", icon: IconCloudDownload },
       { title: "Network", to: "/network", icon: IconNetwork },
@@ -53,15 +55,15 @@ const GROUPS = [
   {
     label: "Files",
     items: [
-      { title: "YAML Explorer", to: "/yaml", icon: IconFileCode },
+      { title: "Explorer", to: "/yaml", icon: IconFileCode },
       { title: "Env files", to: "/env", icon: IconFileText },
-      { title: "Snippets", to: "/snippets", icon: IconCode },
     ],
   },
   {
     label: "Tools",
     items: [
       { title: "AI Assistant", to: "/ai", icon: IconRobot },
+      { title: "Setup", to: "/setup", icon: IconDeviceDesktopAnalytics },
       { title: "Settings", to: "/settings", icon: IconSettings },
     ],
   },
@@ -127,7 +129,7 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter className="border-t p-3">
         <p className="font-mono text-[10px] text-muted-foreground group-data-[collapsible=icon]:hidden">
-          v0.1.0 · mock preview
+          v0.1.0 · stackhand
         </p>
       </SidebarFooter>
     </Sidebar>

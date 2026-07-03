@@ -301,7 +301,7 @@ function StacksPage() {
             <SheetTitle>Logs · {logsFor?.name}</SheetTitle>
             <SheetDescription>Live stream from Docker</SheetDescription>
           </SheetHeader>
-          <div className="mt-4">{logsFor && <LogsViewer name={logsFor.name} />}</div>
+          <div className="mt-4">{logsFor && <LogsViewer name={logsFor.name} stackId={logsFor.id} />}</div>
         </SheetContent>
       </Sheet>
 

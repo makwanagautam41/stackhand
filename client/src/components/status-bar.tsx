@@ -1,7 +1,9 @@
 import { Link } from "@tanstack/react-router";
-import { IconActivity, IconCircleFilled, IconTerminal2 } from "@tabler/icons-react";
+import { IconActivity, IconCircleFilled, IconTerminal2, IconBrandDocker } from "@tabler/icons-react";
 import { useWorkspaces } from "@/lib/workspace-store";
 import { cn } from "@/lib/utils";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
 
 export function StatusBar() {
   const { current, stacksByWs } = useWorkspaces();
@@ -15,6 +17,16 @@ export function StatusBar() {
     (n, s) => n + s.containers.filter((c) => c.status === "error").length,
     0,
   );
+  const [dockerRunning, setDockerRunning] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const check = () => {
+      api.dockerStatus().then((s) => setDockerRunning(s.running)).catch(() => setDockerRunning(false));
+    };
+    check();
+    const t = setInterval(check, 10000);
+    return () => clearInterval(t);
+  }, []);
 
   return (
     <div className="sticky bottom-0 z-20 flex h-7 items-center gap-3 border-t bg-muted/40 px-3 font-mono text-[11px] text-muted-foreground backdrop-blur">
@@ -30,6 +42,19 @@ export function StatusBar() {
           style={{ backgroundColor: current?.color ?? "#888" }}
         />
         <span className="text-foreground/80">{current?.name ?? "—"}</span>
+      </div>
+      <span className="opacity-30">|</span>
+      <div className="flex items-center gap-1.5">
+        <IconBrandDocker className="h-3 w-3" stroke={2} />
+        <span
+          className={cn(
+            "inline-block h-2 w-2 rounded-full",
+            dockerRunning === true ? "bg-emerald-500" : dockerRunning === false ? "bg-red-500" : "bg-muted-foreground/50",
+          )}
+        />
+        <span>
+          {dockerRunning === null ? "checking..." : dockerRunning ? "Docker running" : "Docker not running"}
+        </span>
       </div>
       <span className="opacity-30">|</span>
       <div className="flex items-center gap-1.5">
