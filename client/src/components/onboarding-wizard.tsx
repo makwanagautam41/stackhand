@@ -38,7 +38,7 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
   const [description, setDescription] = useState("");
   const [color, setColor] = useState(WORKSPACE_COLORS[0]);
   const [icon, setIcon] = useState(WORKSPACE_ICONS[0]);
-  const [rootFolder, setRootFolder] = useState("/home/gautam-makwana/stacks");
+  const [rootFolder, setRootFolder] = useState("/home/gautam-makwana/stackhand");
   const [checking, setChecking] = useState(false);
   const [checked, setChecked] = useState(false);
   const [models, setModels] = useState<OllamaModel[]>(DEFAULT_MODELS.map((m) => ({ ...m })));
@@ -134,7 +134,7 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
                   await api.createWorkspace({
                     name: "sample-workspace",
                     description: "Sample workspace with starter content",
-                    rootFolderPath: "/home/gautam-makwana/stacks",
+                    rootFolderPath: "/home/gautam-makwana/stackhand",
                   });
                   await refresh();
                   toast.success("Sample workspace loaded", {
@@ -180,7 +180,8 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
                   </div>
                   <div className="space-y-2">
                     <Label className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-                      Description <span className="normal-case text-muted-foreground/60">(optional)</span>
+                      Description{" "}
+                      <span className="normal-case text-muted-foreground/60">(optional)</span>
                     </Label>
                     <Textarea
                       value={description}
@@ -307,10 +308,17 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
                           : "not connected"}
                     </div>
                     <div className="font-mono text-[11px] text-muted-foreground">
-                      {checked ? `${models.length} models detected` : "click check to look for a local server"}
+                      {checked
+                        ? `${models.length} models detected`
+                        : "click check to look for a local server"}
                     </div>
                   </div>
-                  <Button onClick={runCheck} disabled={checking} variant="outline" className="rounded-md">
+                  <Button
+                    onClick={runCheck}
+                    disabled={checking}
+                    variant="outline"
+                    className="rounded-md"
+                  >
                     {checked ? "Re-check" : "Check"}
                   </Button>
                 </div>
@@ -337,9 +345,14 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
                           />
                           <div className="flex-1 min-w-0">
                             <div className="truncate font-mono text-sm">{m.name}</div>
-                            <div className="font-mono text-[11px] text-muted-foreground">{m.size}</div>
+                            <div className="font-mono text-[11px] text-muted-foreground">
+                              {m.size}
+                            </div>
                           </div>
-                          <Badge variant="secondary" className="rounded-md font-mono text-[10px] uppercase">
+                          <Badge
+                            variant="secondary"
+                            className="rounded-md font-mono text-[10px] uppercase"
+                          >
                             local
                           </Badge>
                         </label>

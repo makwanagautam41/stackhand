@@ -1,17 +1,11 @@
 import { useRef, useState, type DragEvent } from "react";
-import {
-  IconFolder,
-  IconFolderOpen,
-  IconHome,
-  IconUpload,
-  IconX,
-} from "@tabler/icons-react";
+import { IconFolder, IconFolderOpen, IconHome, IconUpload, IconX } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
-const DEFAULT_ROOT = "/home/user/stacks";
+const DEFAULT_ROOT = "/home/gautam-makwana/stackhand";
 
 // Native folder picker: uses <input webkitdirectory> and drag-drop.
 // Since this is a browser preview (no filesystem), we derive a plausible
@@ -46,9 +40,12 @@ export function FolderPicker({
     const items = e.dataTransfer.items;
     if (items && items.length > 0) {
       const item = items[0];
-      const entry = (item as unknown as { webkitGetAsEntry?: () => { isDirectory: boolean; name: string } | null }).webkitGetAsEntry?.();
+      const entry = (
+        item as unknown as {
+          webkitGetAsEntry?: () => { isDirectory: boolean; name: string } | null;
+        }
+      ).webkitGetAsEntry?.();
       if (entry?.isDirectory) {
-
         commit(`/home/user/${entry.name}`);
         return;
       }
@@ -78,7 +75,9 @@ export function FolderPicker({
         <div
           className={cn(
             "grid h-12 w-12 place-items-center rounded-md border bg-background transition-colors",
-            dragOver ? "border-primary text-primary" : "text-muted-foreground group-hover:text-foreground",
+            dragOver
+              ? "border-primary text-primary"
+              : "text-muted-foreground group-hover:text-foreground",
           )}
         >
           {dragOver ? (
@@ -126,7 +125,7 @@ export function FolderPicker({
               value={manual}
               onChange={(e) => setManual(e.target.value)}
               onBlur={() => commit(manual)}
-              placeholder="/home/user/stacks"
+              placeholder="/home/gautam-makwana/stackhand"
               className="h-9 rounded-md pl-8 font-mono text-sm"
             />
             {manual && (
