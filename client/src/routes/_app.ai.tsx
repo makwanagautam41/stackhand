@@ -28,6 +28,8 @@ import {
 import { useWorkspaces } from "@/lib/workspace-store";
 import type { ChatMessage } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
+import { subscribeToOllamaChat, useSocket } from "@/lib/socket";
 
 export const Route = createFileRoute("/_app/ai")({
   component: AIPage,
@@ -53,47 +55,6 @@ const PRESETS = [
   { id: "explain", label: "Explain", prompt: "Explain what this compose file does line by line." },
   { id: "secure", label: "Harden security", prompt: "Suggest security hardening changes for this stack." },
 ];
-
-const FAKE_YAML = `version: "3.9"
-services:
-  postgres:
-    image: postgres:16
-    container_name: postgres-generated
-    environment:
-      POSTGRES_USER: appuser
-      POSTGRES_PASSWORD: changeme
-      POSTGRES_DB: appdb
-    ports:
-      - "5432:5432"
-    volumes:
-      - pg-data:/var/lib/postgresql/data
-    restart: unless-stopped
-volumes:
-  pg-data:
-`;
-
-function fakeReply(prompt: string): { text: string; yaml?: string } {
-  if (/optimi/i.test(prompt)) {
-    return {
-      text:
-        "**Optimization suggestions**\n\n- Pin image tags to specific versions\n- Add `healthcheck` blocks per service\n- Define `deploy.resources.limits`\n- Use named volumes for data\n- Set `restart: unless-stopped`",
-      yaml: FAKE_YAML,
-    };
-  }
-  if (/healthcheck/i.test(prompt)) {
-    return { text: "Added HTTP/TCP healthchecks with `30s` interval and `3` retries to each service.", yaml: FAKE_YAML };
-  }
-  if (/swarm/i.test(prompt)) {
-    return { text: "Converted to Swarm — added `deploy.replicas`, `deploy.resources`, and `deploy.restart_policy` blocks.", yaml: FAKE_YAML };
-  }
-  if (/explain/i.test(prompt)) {
-    return { text: "This compose defines services with their images, port mappings, and volume mounts. Each service runs in its own container on the default bridge network unless overridden." };
-  }
-  if (/postgres|database/i.test(prompt)) {
-    return { text: "Here's a **Postgres** stack with a named volume for persistence, sensible defaults, and an `unless-stopped` restart policy.", yaml: FAKE_YAML };
-  }
-  return { text: "Here's a starter compose file for your request — feel free to save it as a new stack.", yaml: FAKE_YAML };
-}
 
 function AIPage() {
   const {
@@ -144,7 +105,7 @@ function AIPage() {
     toast("Chat cleared");
   };
 
-  const send = (text: string) => {
+  const send = async (text: string) => {
     if (!text.trim()) return;
     const user: ChatMessage = {
       id: crypto.randomUUID(),
@@ -155,17 +116,19 @@ function AIPage() {
     append(user);
     setPrompt("");
     setThinking(true);
-    setTimeout(() => {
-      const reply = fakeReply(text);
+    try {
+      const res = await api.ollamaChat(model, [...messages, user]);
       append({
         id: crypto.randomUUID(),
         role: "assistant",
-        content: reply.text,
-        yaml: reply.yaml,
+        content: res.content,
         ts: new Date().toISOString(),
       });
+    } catch (e: any) {
+      toast.error(e.message ?? "Chat failed");
+    } finally {
       setThinking(false);
-    }, 900);
+    }
   };
 
   const scopedStack = stacks.find((s) => s.id === scope);
@@ -453,7 +416,7 @@ function YamlBlock({ yaml, onUse }: { yaml: string; onUse: () => void }) {
           <button
             type="button"
             onClick={() => {
-              toast.success("Opened in YAML Explorer (simulated)");
+              toast.success("Opened in YAML Explorer");
               onUse();
             }}
             className="flex items-center gap-1 rounded-md bg-primary/90 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary"

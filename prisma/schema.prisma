@@ -1,0 +1,139 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Workspace {
+  id             String   @id @default(uuid())
+  name           String
+  description    String?
+  color          String   @default("#6366f1")
+  icon           String   @default("Server")
+  rootFolderPath String   @default("")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  stacks   Stack[]
+  activity Activity[]
+  snippets Snippet[]
+  alerts   AlertRule[]
+  envFiles EnvFile[]
+  chats    ChatMessage[]
+  backedUpFiles YamlBackup[]
+}
+
+model Stack {
+  id           String   @id @default(uuid())
+  name         String
+  folderPath   String   
+  status       String   @default("unknown")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  containers    Container[]
+  yamlVersions  YamlVersion[]
+  chats         ChatMessage[]
+}
+
+model Container {
+  id        String   @id @default(uuid())
+  dockerId  String   @unique
+  name      String
+  image     String
+  status    String   @default("unknown")
+  createdAt DateTime @default(now())
+
+  stackId String?
+  stack   Stack?  @relation(fields: [stackId], references: [id], onDelete: SetNull)
+}
+
+model YamlVersion {
+  id        String   @id @default(uuid())
+  content   String
+  message   String?
+  ts        DateTime @default(now())
+
+  stackId String
+  stack   Stack   @relation(fields: [stackId], references: [id], onDelete: Cascade)
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid())
+  role      String   
+  content   String   
+  yaml      String?
+  ts        DateTime @default(now())
+
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  stackId     String?
+  stack       Stack?     @relation(fields: [stackId], references: [id], onDelete: Cascade)
+}
+
+model Snippet {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  tags        String   @default("[]")
+  yaml        String
+  createdAt   DateTime @default(now())
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model AlertRule {
+  id            String   @id @default(uuid())
+  name          String
+  target        String
+  condition     String
+  window        String
+  enabled       Boolean  @default(true)
+  lastTriggered String?
+  createdAt     DateTime @default(now())
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model EnvFile {
+  id        String   @id @default(uuid())
+  path      String
+  stackName String?
+  vars      String   @default("[]")
+  createdAt DateTime @default(now())
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model Activity {
+  id          String   @id
+  kind        String
+  message     String
+  ts          DateTime @default(now())
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model Setting {
+  id    String @id
+  value String @default("{}")
+}
+
+model YamlBackup {
+  id        String   @id @default(uuid())
+  filePath  String
+  content   String
+  ts        DateTime @default(now())
+
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}

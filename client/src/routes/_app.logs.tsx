@@ -17,9 +17,10 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { EmptyState } from "@/components/empty-state";
 
-import { MOCK_LOG_LINES } from "@/lib/mock-data";
 import { useWorkspaces } from "@/lib/workspace-store";
 import { cn } from "@/lib/utils";
+import { subscribeToLogs, stopLogs, useSocket } from "@/lib/socket";
+import type { LogEntry } from "@/lib/types";
 
 export const Route = createFileRoute("/_app/logs")({
   component: LogsPage,
@@ -63,20 +64,24 @@ function LogsPage() {
     setLines([]);
   }, [selectedId]);
 
-  useEffect(() => {
-    if (paused || !selected) return;
-    const t = setInterval(() => {
-      const msg = MOCK_LOG_LINES[Math.floor(Math.random() * MOCK_LOG_LINES.length)];
+  useSocket({
+    onLogs: (data) => {
+      if (paused) return;
       const line: Line = {
         ts: new Date().toISOString().slice(11, 19),
-        level: pickLevel(msg),
-        source: selected.name,
-        message: msg.replace(/^\[(INFO|WARN|ERROR)\]\s*/, ""),
+        level: pickLevel(data.line),
+        source: selected?.name ?? data.stackId,
+        message: data.line.replace(/^\[(INFO|WARN|ERROR)\]\s*/, ""),
       };
       setLines((prev) => [...prev.slice(-499), line]);
-    }, 550);
-    return () => clearInterval(t);
-  }, [paused, selected]);
+    },
+  });
+
+  useEffect(() => {
+    if (!selected) return;
+    subscribeToLogs(selected.id);
+    return () => stopLogs(selected.id);
+  }, [selected]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });

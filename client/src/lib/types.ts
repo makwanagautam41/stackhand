@@ -47,8 +47,8 @@ export interface HealthInfo {
 }
 
 export interface ResourceLimits {
-  cpuLimit: number; // %
-  memLimit: number; // MB
+  cpuLimit: number;
+  memLimit: number;
 }
 
 export interface Container {
@@ -76,7 +76,7 @@ export interface Stack {
   containers: Container[];
   lastModified: string;
   yaml: string;
-  runningYaml?: string; // for diff
+  runningYaml?: string;
 }
 
 export interface YamlFile {
@@ -116,7 +116,7 @@ export interface StackTemplate {
   name: string;
   category: string;
   description: string;
-  icon: string; // tabler key or emoji
+  icon: string;
   color: string;
   tags: string[];
   yaml: string;
@@ -134,9 +134,9 @@ export interface Snippet {
 export interface AlertRule {
   id: string;
   name: string;
-  target: string; // container / stack name
+  target: string;
   condition: "restarts>3" | "cpu>80" | "mem>80" | "downtime>5m";
-  window: string; // "5m", "1h"
+  window: string;
   enabled: boolean;
   lastTriggered?: string;
 }
@@ -163,4 +163,73 @@ export interface RegistryImage {
   pulls: string;
   official: boolean;
   tags: string[];
+}
+
+export interface BackendWorkspace {
+  id: string;
+  name: string;
+  description: string | null;
+  color: string;
+  icon: string;
+  rootFolderPath: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BackendStack {
+  id: string;
+  name: string;
+  folderPath: string;
+  status: string;
+  workspaceId: string;
+  createdAt: string;
+  updatedAt: string;
+  services?: { name: string; image: string; ports: any; volumes: any; environment: any }[];
+  yaml?: string;
+  containers?: any[];
+}
+
+export interface BackendContainer {
+  id: string;
+  name: string;
+  image: string;
+  status: string;
+  ports?: { host: number; container: number; protocol: string }[];
+  created?: number;
+  state?: string;
+}
+
+export interface BackendImage {
+  id: string;
+  tags: string[];
+  created: number;
+  size: number;
+}
+
+export interface DashboardData {
+  totalStacks: number;
+  runningStacks: number;
+  stoppedStacks: number;
+  errorStacks: number;
+  totalContainers: number;
+  runningContainers: number;
+  diskUsage: number;
+  recentActivity: ActivityEvent[];
+}
+
+export interface OllamaStatus {
+  connected: boolean;
+  error?: string;
+}
+
+export interface OllamaChatResponse {
+  role: string;
+  content: string;
+}
+
+export interface GenerateStackResponse {
+  imageName?: string;
+  composeYaml: string;
+  explanation: string;
+  image?: string;
 }

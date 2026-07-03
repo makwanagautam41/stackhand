@@ -16,18 +16,14 @@ import type {
   EnvVar,
   Snippet,
   Stack,
-  Workspace,
   YamlFile,
   YamlVersion,
+  Workspace,
 } from "./types";
-import {
-  buildFileTree,
-  seedStacksFor,
-  SEED_ALERTS,
-  SEED_ENV_FILES,
-  SEED_SNIPPETS,
-} from "./mock-data";
-import { logActivity as sqliteLogActivity } from "./sqlite";
+import { api } from "./api";
+import { getStoredToken, setToken } from "./api";
+
+export { getStoredToken, setToken };
 
 interface WorkspaceStore {
   workspaces: Workspace[];
@@ -44,16 +40,20 @@ interface WorkspaceStore {
   yamlHistoryByStack: Record<string, YamlVersion[]>;
   density: Density;
   hydrated: boolean;
+  loading: boolean;
+  error: string | null;
 
   setCurrent: (id: string) => void;
   setDensity: (d: Density) => void;
-  addWorkspace: (w: Workspace) => void;
-  updateWorkspace: (id: string, patch: Partial<Workspace>) => void;
-  deleteWorkspace: (id: string) => void;
+  refresh: () => Promise<void>;
+  refreshStacks: () => Promise<void>;
+  addWorkspace: (name: string, opts?: { description?: string; color?: string; icon?: string; rootFolderPath?: string }) => Promise<Workspace>;
+  updateWorkspace: (id: string, patch: { name?: string; description?: string; color?: string; icon?: string; rootFolderPath?: string }) => Promise<void>;
+  deleteWorkspace: (id: string, alsoDeleteFolder?: boolean) => Promise<void>;
 
   addStack: (workspaceId: string, stack: Stack) => void;
   updateStack: (workspaceId: string, stackId: string, patch: Partial<Stack>) => void;
-  deleteStack: (workspaceId: string, stackId: string) => void;
+  deleteStack: (workspaceId: string, stackId: string) => Promise<void>;
   applyStackYaml: (workspaceId: string, stackId: string) => void;
 
   updateYamlFile: (workspaceId: string, fileId: string, content: string) => void;
@@ -88,15 +88,12 @@ interface WorkspaceStore {
 
 const Ctx = createContext<WorkspaceStore | null>(null);
 const STORAGE_KEY = "stackhand-state-v2";
+const TOKEN_STORAGE_KEY = "stackhand-api-token";
 
 interface Persisted {
-  workspaces: Workspace[];
   currentId: string | null;
-  stacksByWs: Record<string, Stack[]>;
-  treeByWs: Record<string, YamlFile>;
   chatByWs: Record<string, ChatMessage[]>;
   chatByStack: Record<string, ChatMessage[]>;
-  activityByWs: Record<string, ActivityEvent[]>;
   snippetsByWs: Record<string, Snippet[]>;
   alertsByWs: Record<string, AlertRule[]>;
   envFilesByWs: Record<string, EnvFileEntry[]>;
@@ -118,41 +115,90 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [yamlHistoryByStack, setYamlHistoryByStack] = useState<Record<string, YamlVersion[]>>({});
   const [density, setDensityState] = useState<Density>("comfortable");
   const [hydrated, setHydrated] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadWorkspaces = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const ws = await api.listWorkspaces();
+      setWorkspaces(ws);
+      // Validate the restored currentId against actual workspaces.
+      // If it's stale (deleted workspace) or absent, fall back to first workspace.
+      setCurrentId((prev) => {
+        if (!prev || !ws.find((w) => w.id === prev)) {
+          return ws[0]?.id ?? null;
+        }
+        return prev;
+      });
+      setLoading(false);
+      setHydrated(true);
+    } catch (e: any) {
+      setError(e.message);
+      setLoading(false);
+      setHydrated(true);
+    }
+  }, []);
+
+  const loadStacks = useCallback(async () => {
+    if (!currentId) return;
+    try {
+      const stacks = await api.listStacks(currentId);
+      setStacksByWs((prev) => ({ ...prev, [currentId]: stacks }));
+    } catch (e: any) {
+      // If the workspace no longer exists (404), clear it from the current selection
+      // so the user is redirected to onboarding rather than stuck on an error.
+      if (e.message?.includes('404') || e.message?.includes('not found') || e.message?.includes('Workspace not found')) {
+        setCurrentId(null);
+      }
+    }
+  }, [currentId]);
+
+  const loadDashboard = useCallback(async () => {
+    if (!currentId) return;
+    try {
+      const dash = await api.getDashboard();
+      setActivityByWs((prev) => ({
+        ...prev,
+        [currentId]: dash.recentActivity as ActivityEvent[],
+      }));
+    } catch {}
+  }, [currentId]);
 
   useEffect(() => {
+    const savedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
+    if (savedToken) setToken(savedToken);
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const p: Persisted = JSON.parse(raw);
-        setWorkspaces(p.workspaces ?? []);
         setCurrentId(p.currentId ?? null);
-        setStacksByWs(p.stacksByWs ?? {});
-        setTreeByWs(p.treeByWs ?? {});
         setChatByWs(p.chatByWs ?? {});
         setChatByStack(p.chatByStack ?? {});
-        setActivityByWs(p.activityByWs ?? {});
         setSnippetsByWs(p.snippetsByWs ?? {});
         setAlertsByWs(p.alertsByWs ?? {});
         setEnvFilesByWs(p.envFilesByWs ?? {});
         setYamlHistoryByStack(p.yamlHistoryByStack ?? {});
         setDensityState(p.density ?? "comfortable");
       }
-    } catch {
-      /* ignore */
+    } catch {}
+    loadWorkspaces();
+  }, [loadWorkspaces]);
+
+  useEffect(() => {
+    if (currentId) {
+      loadStacks();
+      loadDashboard();
     }
-    setHydrated(true);
-  }, []);
+  }, [currentId, loadStacks, loadDashboard]);
 
   useEffect(() => {
     if (!hydrated) return;
     const p: Persisted = {
-      workspaces,
       currentId,
-      stacksByWs,
-      treeByWs,
       chatByWs,
       chatByStack,
-      activityByWs,
       snippetsByWs,
       alertsByWs,
       envFilesByWs,
@@ -161,22 +207,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
   }, [
-    workspaces,
-    currentId,
-    stacksByWs,
-    treeByWs,
-    chatByWs,
-    chatByStack,
-    activityByWs,
-    snippetsByWs,
-    alertsByWs,
-    envFilesByWs,
-    yamlHistoryByStack,
-    density,
-    hydrated,
+    currentId, chatByWs, chatByStack, snippetsByWs, alertsByWs,
+    envFilesByWs, yamlHistoryByStack, density, hydrated,
   ]);
 
-  // Apply density to html
   useEffect(() => {
     document.documentElement.dataset.density = density;
   }, [density]);
@@ -186,60 +220,65 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     [workspaces, currentId],
   );
 
-  const setCurrent = useCallback((id: string) => setCurrentId(id), []);
+  const setCurrent = useCallback((id: string) => {
+    setCurrentId(id);
+  }, []);
+
   const setDensity = useCallback((d: Density) => setDensityState(d), []);
+
+  const refresh = useCallback(async () => {
+    await loadWorkspaces();
+    await loadStacks();
+    await loadDashboard();
+  }, [loadWorkspaces, loadStacks, loadDashboard]);
+
+  const refreshStacks = useCallback(async () => {
+    await loadStacks();
+  }, [loadStacks]);
 
   const pushActivity = useCallback(
     (workspaceId: string, ev: Omit<ActivityEvent, "id" | "ts">) => {
       const id = crypto.randomUUID();
-      const now = Date.now();
       const full: ActivityEvent = {
         ...ev,
         id,
-        ts: new Date(now).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        ts: new Date().toISOString(),
       };
       setActivityByWs((prev) => ({
         ...prev,
         [workspaceId]: [full, ...(prev[workspaceId] ?? [])].slice(0, 100),
       }));
-      // Mirror to SQLite for durable log
-      void sqliteLogActivity({
-        id,
-        workspaceId,
-        kind: ev.kind,
-        message: ev.message,
-        ts: now,
-      }).catch(() => {});
     },
     [],
   );
 
   const addWorkspace = useCallback(
-    (w: Workspace) => {
+    async (name: string, opts?: { description?: string; color?: string; icon?: string; rootFolderPath?: string }) => {
+      const w = await api.createWorkspace({
+        name,
+        description: opts?.description,
+        color: opts?.color,
+        icon: opts?.icon,
+        rootFolderPath: opts?.rootFolderPath,
+      });
       setWorkspaces((prev) => [...prev, w]);
       setCurrentId(w.id);
-      setStacksByWs((prev) => ({
-        ...prev,
-        [w.id]: seedStacksFor(w.id, Object.keys(prev).length),
-      }));
-      setTreeByWs((prev) => ({ ...prev, [w.id]: buildFileTree(w.rootFolder) }));
-      setSnippetsByWs((prev) => ({ ...prev, [w.id]: SEED_SNIPPETS.map((s) => ({ ...s })) }));
-      setAlertsByWs((prev) => ({ ...prev, [w.id]: SEED_ALERTS.map((a) => ({ ...a })) }));
-      setEnvFilesByWs((prev) => ({ ...prev, [w.id]: SEED_ENV_FILES.map((e) => ({ ...e })) }));
-      pushActivity(w.id, { kind: "create", message: `workspace created: ${w.name}` });
+      return w;
     },
-    [pushActivity],
+    [],
   );
 
-  const updateWorkspace = useCallback((id: string, patch: Partial<Workspace>) => {
-    setWorkspaces((prev) => prev.map((w) => (w.id === id ? { ...w, ...patch } : w)));
-    if (patch.rootFolder) {
-      setTreeByWs((prev) => ({ ...prev, [id]: buildFileTree(patch.rootFolder!) }));
-    }
-  }, []);
+  const updateWorkspace = useCallback(
+    async (id: string, patch: { name?: string; description?: string; color?: string; icon?: string; rootFolderPath?: string }) => {
+      const w = await api.updateWorkspace(id, patch);
+      setWorkspaces((prev) => prev.map((x) => (x.id === id ? { ...x, ...w } : x)));
+    },
+    [],
+  );
 
   const deleteWorkspace = useCallback(
-    (id: string) => {
+    async (id: string, alsoDeleteFolder?: boolean) => {
+      await api.deleteWorkspace(id, alsoDeleteFolder);
       setWorkspaces((prev) => prev.filter((w) => w.id !== id));
       const strip = <T,>(prev: Record<string, T>) => {
         const { [id]: _d, ...rest } = prev;
@@ -260,27 +299,33 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     [currentId, workspaces],
   );
 
-  const addStack = useCallback(
-    (workspaceId: string, stack: Stack) => {
-      setStacksByWs((prev) => ({
-        ...prev,
-        [workspaceId]: [...(prev[workspaceId] ?? []), stack],
-      }));
-      pushActivity(workspaceId, { kind: "create", message: `stack created: ${stack.name}` });
-    },
-    [pushActivity],
-  );
+  const addStack = useCallback((workspaceId: string, stack: Stack) => {
+    setStacksByWs((prev) => ({
+      ...prev,
+      [workspaceId]: [...(prev[workspaceId] ?? []), stack],
+    }));
+  }, []);
 
-  const updateStack = useCallback(
-    (workspaceId: string, stackId: string, patch: Partial<Stack>) => {
+  const updateStack = useCallback((workspaceId: string, stackId: string, patch: Partial<Stack>) => {
+    setStacksByWs((prev) => ({
+      ...prev,
+      [workspaceId]: (prev[workspaceId] ?? []).map((s) =>
+        s.id === stackId ? { ...s, ...patch } : s,
+      ),
+    }));
+  }, []);
+
+  const deleteStack = useCallback(
+    async (workspaceId: string, stackId: string) => {
+      const name = (stacksByWs[workspaceId] ?? []).find((s) => s.id === stackId)?.name;
+      await api.deleteStack(stackId);
       setStacksByWs((prev) => ({
         ...prev,
-        [workspaceId]: (prev[workspaceId] ?? []).map((s) =>
-          s.id === stackId ? { ...s, ...patch } : s,
-        ),
+        [workspaceId]: (prev[workspaceId] ?? []).filter((s) => s.id !== stackId),
       }));
+      if (name) pushActivity(workspaceId, { kind: "delete", message: `stack removed: ${name}` });
     },
-    [],
+    [pushActivity, stacksByWs],
   );
 
   const applyStackYaml = useCallback((workspaceId: string, stackId: string) => {
@@ -291,18 +336,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       ),
     }));
   }, []);
-
-  const deleteStack = useCallback(
-    (workspaceId: string, stackId: string) => {
-      const name = (stacksByWs[workspaceId] ?? []).find((s) => s.id === stackId)?.name;
-      setStacksByWs((prev) => ({
-        ...prev,
-        [workspaceId]: (prev[workspaceId] ?? []).filter((s) => s.id !== stackId),
-      }));
-      if (name) pushActivity(workspaceId, { kind: "delete", message: `stack removed: ${name}` });
-    },
-    [pushActivity, stacksByWs],
-  );
 
   const updateYamlFile = useCallback(
     (workspaceId: string, fileId: string, content: string) => {
@@ -391,27 +424,20 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           node.children.forEach((c) => fix(c, node.path));
         }
       });
-      pushActivity(workspaceId, { kind: "edit", message: `renamed to ${newName}` });
     },
-    [mutateTree, pushActivity],
+    [mutateTree],
   );
 
   const deleteYamlNode = useCallback(
     (workspaceId: string, fileId: string) => {
-      let removedName = "";
       mutateTree(workspaceId, (root) => {
         const parent = findParent(root, fileId);
         if (!parent || !parent.children) return;
         const idx = parent.children.findIndex((c) => c.id === fileId);
-        if (idx >= 0) {
-          removedName = parent.children[idx].name;
-          parent.children.splice(idx, 1);
-        }
+        if (idx >= 0) parent.children.splice(idx, 1);
       });
-      if (removedName)
-        pushActivity(workspaceId, { kind: "delete", message: `deleted ${removedName}` });
     },
-    [mutateTree, pushActivity],
+    [mutateTree],
   );
 
   const duplicateYamlNode = useCallback(
@@ -422,16 +448,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         const node = findNode(root, fileId);
         if (!parent || !parent.children || !node) return;
         const stamp = (n: YamlFile, parentPath: string, isRoot: boolean) => {
-          n.id = crypto.randomUUID();
-          if (isRoot) {
-            const parts = n.name.split(".");
-            if (parts.length > 1) {
-              parts[parts.length - 2] += "-copy";
-              n.name = parts.join(".");
-            } else {
-              n.name = `${n.name}-copy`;
-            }
+          const parts = n.name.split(".");
+          if (parts.length > 1) {
+            parts[parts.length - 2] += "-copy";
+            n.name = parts.join(".");
+          } else {
+            n.name = `${n.name}-copy`;
           }
+          n.id = crypto.randomUUID();
           n.path = `${parentPath}/${n.name}`;
           n.children?.forEach((c) => stamp(c, n.path, false));
         };
@@ -441,11 +465,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         const idx = parent.children.findIndex((c) => c.id === fileId);
         parent.children.splice(idx + 1, 0, clone);
       });
-      if (newId)
-        pushActivity(workspaceId, { kind: "create", message: `duplicated file` });
       return newId;
     },
-    [mutateTree, pushActivity],
+    [mutateTree],
   );
 
   const createYamlChild = useCallback(
@@ -453,8 +475,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       let newId: string | null = null;
       mutateTree(workspaceId, (root) => {
         const parent = findNode(root, parentId);
-        if (!parent) return;
-        if (!parent.isDir) return;
+        if (!parent || !parent.isDir) return;
         parent.children ??= [];
         const child: YamlFile = {
           id: crypto.randomUUID(),
@@ -468,14 +489,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         newId = child.id;
         parent.children.push(child);
       });
-      if (newId)
-        pushActivity(workspaceId, {
-          kind: "create",
-          message: `created ${isDir ? "folder" : "file"}: ${name}`,
-        });
       return newId;
     },
-    [mutateTree, pushActivity],
+    [mutateTree],
   );
 
   const appendChat = useCallback((workspaceId: string, msg: ChatMessage) => {
@@ -564,13 +580,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const exportAll = useCallback((): string => {
     const p: Persisted = {
-      workspaces,
       currentId,
-      stacksByWs,
-      treeByWs,
       chatByWs,
       chatByStack,
-      activityByWs,
       snippetsByWs,
       alertsByWs,
       envFilesByWs,
@@ -579,30 +591,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     };
     return JSON.stringify(p, null, 2);
   }, [
-    workspaces,
-    currentId,
-    stacksByWs,
-    treeByWs,
-    chatByWs,
-    chatByStack,
-    activityByWs,
-    snippetsByWs,
-    alertsByWs,
-    envFilesByWs,
-    yamlHistoryByStack,
-    density,
+    currentId, chatByWs, chatByStack, snippetsByWs, alertsByWs,
+    envFilesByWs, yamlHistoryByStack, density,
   ]);
 
   const importAll = useCallback((json: string): boolean => {
     try {
       const p: Persisted = JSON.parse(json);
-      setWorkspaces(p.workspaces ?? []);
       setCurrentId(p.currentId ?? null);
-      setStacksByWs(p.stacksByWs ?? {});
-      setTreeByWs(p.treeByWs ?? {});
       setChatByWs(p.chatByWs ?? {});
       setChatByStack(p.chatByStack ?? {});
-      setActivityByWs(p.activityByWs ?? {});
       setSnippetsByWs(p.snippetsByWs ?? {});
       setAlertsByWs(p.alertsByWs ?? {});
       setEnvFilesByWs(p.envFilesByWs ?? {});
@@ -615,50 +613,19 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value: WorkspaceStore = {
-    workspaces,
-    currentId,
-    current,
-    stacksByWs,
-    treeByWs,
-    chatByWs,
-    chatByStack,
-    activityByWs,
-    snippetsByWs,
-    alertsByWs,
-    envFilesByWs,
-    yamlHistoryByStack,
-    density,
-    hydrated,
-    setCurrent,
-    setDensity,
-    addWorkspace,
-    updateWorkspace,
-    deleteWorkspace,
-    addStack,
-    updateStack,
-    applyStackYaml,
-    deleteStack,
-    updateYamlFile,
-    updateYamlEnv,
-    renameYamlNode,
-    deleteYamlNode,
-    duplicateYamlNode,
-    createYamlChild,
-    appendChat,
-    clearChat,
-    appendStackChat,
-    clearStackChat,
-    pushActivity,
-    addSnippet,
-    deleteSnippet,
-    addAlert,
-    updateAlert,
-    deleteAlert,
-    updateEnvFile,
-    addEnvFile,
-    pushYamlVersion,
-    exportAll,
-    importAll,
+    workspaces, currentId, current, stacksByWs, treeByWs,
+    chatByWs, chatByStack, activityByWs, snippetsByWs, alertsByWs,
+    envFilesByWs, yamlHistoryByStack, density, hydrated, loading, error,
+    setCurrent, setDensity, refresh, refreshStacks,
+    addWorkspace, updateWorkspace, deleteWorkspace,
+    addStack, updateStack, deleteStack, applyStackYaml,
+    updateYamlFile, updateYamlEnv, renameYamlNode, deleteYamlNode,
+    duplicateYamlNode, createYamlChild,
+    appendChat, clearChat, appendStackChat, clearStackChat,
+    pushActivity, addSnippet, deleteSnippet,
+    addAlert, updateAlert, deleteAlert,
+    updateEnvFile, addEnvFile, pushYamlVersion,
+    exportAll, importAll,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

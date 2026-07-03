@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
+import { api } from "@/lib/api";
 import {
   IconArrowLeft,
   IconEye,
@@ -53,6 +54,7 @@ function StackDetail() {
     pushYamlVersion,
     yamlHistoryByStack,
     pushActivity,
+    refreshStacks,
   } = useWorkspaces();
   const [showSecrets, setShowSecrets] = useState(false);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
@@ -74,20 +76,23 @@ function StackDetail() {
   const history = yamlHistoryByStack[stack.id] ?? [];
   const hasPending = (stack.runningYaml ?? "") !== stack.yaml;
 
-  const runContainer = (cid: string, action: "start" | "stop" | "restart") => {
+  const runContainer = async (cid: string, action: "start" | "stop" | "restart") => {
     setBusy((b) => ({ ...b, [cid]: true }));
-    setTimeout(() => {
-      const next: ContainerStatus = action === "stop" ? "stopped" : "running";
-      updateStack(current.id, stack.id, {
-        containers: stack.containers.map((c) => (c.id === cid ? { ...c, status: next } : c)),
-      });
-      setBusy((b) => ({ ...b, [cid]: false }));
+    try {
+      if (action === "start") await api.startContainer(cid);
+      else if (action === "stop") await api.stopContainer(cid);
+      else await api.restartContainer(cid);
+      await refreshStacks();
       pushActivity(current.id, {
         kind: action === "stop" ? "stop" : "start",
         message: `${action} ${stack.containers.find((c) => c.id === cid)?.name}`,
       });
       toast.success(`Container ${action}`);
-    }, 1200);
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setBusy((b) => ({ ...b, [cid]: false }));
+    }
   };
 
   const saveYaml = (v: string) => {
@@ -278,7 +283,7 @@ function StackDetail() {
         <SheetContent side="right" className="w-full sm:max-w-2xl">
           <SheetHeader>
             <SheetTitle className="font-mono">Logs · {logsFor}</SheetTitle>
-            <SheetDescription>Live stream (simulated)</SheetDescription>
+            <SheetDescription>Live stream via WebSocket</SheetDescription>
           </SheetHeader>
           <div className="mt-4">{logsFor && <LogsViewer name={logsFor} />}</div>
         </SheetContent>

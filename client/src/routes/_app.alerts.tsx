@@ -80,7 +80,7 @@ function AlertsPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Alert rules</h1>
           <p className="text-sm text-muted-foreground">
-            Fires notifications when conditions are met (simulated).
+            Fires notifications when conditions are met.
           </p>
         </div>
         <Button className="rounded-md" onClick={() => setOpen(true)}>

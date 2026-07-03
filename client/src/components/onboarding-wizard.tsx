@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
+import { api } from "@/lib/api";
 import {
   IconArrowLeft,
   IconArrowRight,
@@ -19,16 +20,16 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { FolderPicker } from "@/components/folder-picker";
-import { WORKSPACE_COLORS, WORKSPACE_ICONS, DEFAULT_MODELS, buildSampleWorkspace } from "@/lib/mock-data";
+import { WORKSPACE_COLORS, WORKSPACE_ICONS, DEFAULT_MODELS } from "@/lib/mock-data";
 import { getWorkspaceIcon } from "@/lib/icon-map";
 import { useWorkspaces } from "@/lib/workspace-store";
-import type { OllamaModel, Workspace } from "@/lib/types";
+import type { OllamaModel } from "@/lib/types";
 import { IconSparkles } from "@tabler/icons-react";
 
 const SECTIONS = ["Workspace", "Root folder", "Ollama"] as const;
 
 export function OnboardingWizard({ onDone }: { onDone: () => void }) {
-  const { addWorkspace, workspaces } = useWorkspaces();
+  const { addWorkspace, workspaces, refresh } = useWorkspaces();
   const navigate = useNavigate();
   const isFirst = workspaces.length === 0;
 
@@ -37,7 +38,7 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
   const [description, setDescription] = useState("");
   const [color, setColor] = useState(WORKSPACE_COLORS[0]);
   const [icon, setIcon] = useState(WORKSPACE_ICONS[0]);
-  const [rootFolder, setRootFolder] = useState("/home/user/stacks");
+  const [rootFolder, setRootFolder] = useState("/home/gautam-makwana/stacks");
   const [checking, setChecking] = useState(false);
   const [checked, setChecked] = useState(false);
   const [models, setModels] = useState<OllamaModel[]>(DEFAULT_MODELS.map((m) => ({ ...m })));
@@ -52,39 +53,52 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
     return true;
   }, [step, name, rootFolder]);
 
-  const runCheck = () => {
+  const runCheck = async () => {
     setChecking(true);
     setChecked(false);
-    setTimeout(() => {
-      setChecking(false);
+    try {
+      const status = await api.ollamaStatus();
       setChecked(true);
-      setOllamaConnected(true);
-      toast.success("Connected to Ollama", {
-        description: `Detected ${DEFAULT_MODELS.length} models on localhost:11434`,
+      setOllamaConnected(status.connected);
+      if (status.connected) {
+        toast.success("Connected to Ollama", {
+          description: "Ollama server is running",
+        });
+      } else {
+        toast.error("Ollama not connected", {
+          description: status.error || "Could not reach Ollama",
+        });
+      }
+    } catch (e: any) {
+      setChecked(true);
+      setOllamaConnected(false);
+      toast.error("Failed to connect to Ollama", {
+        description: e.message,
       });
-    }, 1400);
+    } finally {
+      setChecking(false);
+    }
   };
 
-  const submit = () => {
+  const submit = async () => {
     setCreating(true);
-    setTimeout(() => {
-      const ws: Workspace = {
-        id: crypto.randomUUID(),
+    try {
+      await api.createWorkspace({
         name: name.trim(),
         description: description.trim() || undefined,
         color,
         icon,
-        rootFolder,
-        ollamaConnected,
-        models: ollamaConnected ? models : [],
-        createdAt: new Date().toISOString(),
-      };
-      addWorkspace(ws);
-      setCreating(false);
-      toast.success(`Workspace "${ws.name}" created`);
+        rootFolderPath: rootFolder,
+      });
+      await refresh();
+      toast.success(`Workspace "${name.trim()}" created`);
       onDone();
       navigate({ to: "/dashboard" });
-    }, 700);
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setCreating(false);
+    }
   };
 
   return (
@@ -116,11 +130,15 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
                 variant="outline"
                 size="sm"
                 className="rounded-md font-mono text-xs"
-                onClick={() => {
-                  const sample = buildSampleWorkspace();
-                  addWorkspace(sample);
+                onClick={async () => {
+                  await api.createWorkspace({
+                    name: "sample-workspace",
+                    description: "Sample workspace with starter content",
+                    rootFolderPath: "/home/gautam-makwana/stacks",
+                  });
+                  await refresh();
                   toast.success("Sample workspace loaded", {
-                    description: "Prefilled with stacks, alerts, snippets, and env files.",
+                    description: "Workspace created with starter content.",
                   });
                   onDone();
                   navigate({ to: "/dashboard" });

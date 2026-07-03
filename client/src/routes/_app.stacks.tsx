@@ -69,8 +69,17 @@ import {
 import { StatusBadge } from "@/components/status-badge";
 import { LogsViewer } from "@/components/logs-viewer";
 import { useWorkspaces } from "@/lib/workspace-store";
-import { STARTER_TEMPLATES } from "@/lib/mock-data";
+import { api } from "@/lib/api";
 import type { Stack, StackStatus } from "@/lib/types";
+
+const STARTER_TEMPLATES = [
+  { id: "nginx", name: "Nginx", desc: "Reverse proxy / static files" },
+  { id: "redis", name: "Redis", desc: "In-memory data store" },
+  { id: "postgres", name: "Postgres", desc: "SQL database" },
+  { id: "mysql", name: "MySQL", desc: "SQL database" },
+  { id: "mongo", name: "MongoDB", desc: "Document database" },
+  { id: "blank", name: "Custom (blank)", desc: "Empty compose file" },
+];
 
 export const Route = createFileRoute("/_app/stacks")({
   component: StacksPage,
@@ -83,7 +92,7 @@ export const Route = createFileRoute("/_app/stacks")({
 });
 
 function StacksPage() {
-  const { current, stacksByWs, updateStack, deleteStack, addStack } = useWorkspaces();
+  const { current, stacksByWs, updateStack, deleteStack, addStack, refreshStacks } = useWorkspaces();
   const [filter, setFilter] = useState<"all" | StackStatus>("all");
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState<Record<string, boolean>>({});
@@ -102,23 +111,19 @@ function StacksPage() {
     });
   }, [stacks, filter, q]);
 
-  const runAction = (stack: Stack, action: "start" | "stop" | "restart") => {
+  const runAction = async (stack: Stack, action: "start" | "stop" | "restart") => {
     setBusy((b) => ({ ...b, [stack.id]: true }));
-    setTimeout(() => {
-      const next: StackStatus =
-        action === "stop" ? "stopped" : "running";
-      updateStack(current.id, stack.id, {
-        status: next,
-        containers: stack.containers.map((c) => ({
-          ...c,
-          status: next === "stopped" ? "stopped" : "running",
-        })),
-      });
+    try {
+      if (action === "start") await api.composeUp(stack.id);
+      else if (action === "stop") await api.composeDown(stack.id);
+      else await api.composeRestart(stack.id);
+      await refreshStacks();
+      toast.success(`${stack.name} ${action === "start" ? "started" : action === "stop" ? "stopped" : "restarted"}`);
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
       setBusy((b) => ({ ...b, [stack.id]: false }));
-      toast.success(
-        `${stack.name} ${action === "start" ? "started" : action === "stop" ? "stopped" : "restarted"}`,
-      );
-    }, 1400);
+    }
   };
 
   return (
@@ -294,7 +299,7 @@ function StacksPage() {
         <SheetContent side="right" className="w-full sm:max-w-2xl">
           <SheetHeader>
             <SheetTitle>Logs · {logsFor?.name}</SheetTitle>
-            <SheetDescription>Live stream (simulated)</SheetDescription>
+            <SheetDescription>Live stream from Docker</SheetDescription>
           </SheetHeader>
           <div className="mt-4">{logsFor && <LogsViewer name={logsFor.name} />}</div>
         </SheetContent>
@@ -306,18 +311,21 @@ function StacksPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {deleteFor?.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This removes the stack and its YAML reference. Containers keep running until
-              stopped manually (simulated).
+              This removes the stack and its YAML reference. Running containers will be stopped.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
+              onClick={async () => {
                 if (deleteFor) {
-                  deleteStack(current.id, deleteFor.id);
-                  toast.success(`${deleteFor.name} deleted`);
+                  try {
+                    await deleteStack(current.id, deleteFor.id);
+                    toast.success(`${deleteFor.name} deleted`);
+                  } catch (e: any) {
+                    toast.error(e.message);
+                  }
                 }
                 setDeleteFor(null);
               }}
@@ -331,9 +339,15 @@ function StacksPage() {
       <NewStackDialog
         open={newOpen}
         onOpenChange={setNewOpen}
-        onCreate={(stack) => {
-          addStack(current.id, { ...stack, workspaceId: current.id });
-          toast.success(`Stack ${stack.name} created`);
+        onCreate={async (stack) => {
+          try {
+            const created = await api.createStack(current.id, { name: stack.name, yaml: stack.yaml, folderName: stack.name.toLowerCase().replace(/[^a-z0-9-]/g, '-') });
+            addStack(current.id, { ...created, workspaceId: current.id });
+            await refreshStacks();
+            toast.success(`Stack ${stack.name} created`);
+          } catch (e: any) {
+            toast.error(e.message);
+          }
         }}
       />
     </div>

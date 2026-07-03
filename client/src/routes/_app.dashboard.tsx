@@ -2,6 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Bot, FolderTree, Layers, Plus, TrendingUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
 import { useWorkspaces } from "@/lib/workspace-store";
 import type { YamlFile } from "@/lib/types";
 import {
@@ -28,24 +30,42 @@ export const Route = createFileRoute("/_app/dashboard")({
 });
 
 function DashboardPage() {
-  const { current, stacksByWs, activityByWs, treeByWs } = useWorkspaces();
+  const { current, stacksByWs, treeByWs, activityByWs, loading } = useWorkspaces();
+  const tree = current ? treeByWs[current.id] : undefined;
+  const [dashData, setDashData] = useState<any>(null);
+  
+  useEffect(() => {
+    api.getDashboard().then(setDashData).catch(() => {});
+  }, [current?.id]);
+  
   if (!current) return null;
   const stacks = stacksByWs[current.id] ?? [];
   const containers = stacks.flatMap((s) => s.containers);
   const running = containers.filter((c) => c.status === "running").length;
   const stopped = containers.filter((c) => c.status === "stopped").length;
   const activity = (activityByWs[current.id] ?? []).slice(0, 6);
-  const tree = treeByWs[current.id];
-  const diskBytes = tree ? sumTreeBytes(tree) : 0;
-  const diskMB = diskBytes / (1024 * 1024);
-  const diskLabel =
-    diskMB >= 1024 ? `${(diskMB / 1024).toFixed(2)} GB` : `${diskMB.toFixed(2)} MB`;
-
-  const cpuData = Array.from({ length: 12 }, (_, i) => ({
-    t: `${i}m`,
-    cpu: Math.round(20 + Math.random() * 60),
-    mem: Math.round(30 + Math.random() * 50),
-  }));
+  
+  const totalStacks = dashData?.totalStacks ?? stacks.length;
+  const totalContainers = dashData?.totalContainers ?? containers.length;
+  const runningContainers = dashData?.runningContainers ?? running;
+  const diskLabel = dashData?.diskUsage
+    ? dashData.diskUsage >= 1073741824
+      ? `${(dashData.diskUsage / 1073741824).toFixed(2)} GB`
+      : `${(dashData.diskUsage / 1048576).toFixed(2)} MB`
+    : "—";
+  
+  // Real-ish CPU data (use random for demo but from containers)
+  const cpuData = containers.length > 0
+    ? containers.slice(0, 12).map((c, i) => ({
+        t: c.name.slice(0, 8),
+        cpu: c.cpu || 0,
+        mem: c.mem || 0,
+      }))
+    : Array.from({ length: 6 }, (_, i) => ({
+        t: `${i}m`,
+        cpu: 0,
+        mem: 0,
+      }));
 
   const perContainer = containers.slice(0, 6).map((c) => ({
     name: c.name.slice(0, 10),

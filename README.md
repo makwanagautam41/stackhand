@@ -1,98 +1,124 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Stackhand
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Personal Docker/YAML stack manager — manage docker-compose stacks, containers, images, and Ollama AI from a web UI.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Project Structure
 
-## Description
-
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Project setup
-
-```bash
-$ npm install
+```
+├── src/               # NestJS backend (TypeScript)
+│   ├── auth/          # Bearer token guard
+│   ├── common/        # Shared utilities (path validation, exception filter, activity logger)
+│   ├── prisma/        # Prisma service (SQLite via Prisma ORM)
+│   ├── workspace/     # Workspace CRUD
+│   ├── filesystem/    # File/folder browsing & YAML editing
+│   ├── stack/         # Docker Compose stack management
+│   ├── container/     # Docker container management (via dockerode)
+│   ├── image/         # Docker image management & Docker Hub search
+│   ├── ollama/        # Ollama AI chat & compose generation
+│   ├── dashboard/     # Aggregated overview data
+│   ├── settings/      # Global & per-workspace settings
+│   ├── gateway/       # WebSocket gateway (logs, compose progress, stats, image pull, AI streaming)
+│   ├── main.ts        # Entry point
+│   └── app.module.ts  # Root module
+├── client/           # TanStack Start (React SSR) frontend
+├── prisma/           # Prisma schema & migrations
+├── workspaces-data/  # SQLite database (auto-created)
+├── .env              # Environment variables
+└── package.json      # Root scripts
 ```
 
-## Compile and run the project
+## Quick Start
 
 ```bash
-# development
-$ npm run start
+# 1. Install dependencies
+npm run setup
 
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+# 2. Start development (backend on :4000, frontend on :3000)
+npm run dev
 ```
 
-## Run tests
+The frontend dev server proxies `/api` and `/socket.io` to the NestJS backend.
+
+## Scripts
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Start backend (`:4000`) + frontend dev server (`:3000`) concurrently |
+| `npm run dev:backend` | Backend only with watch mode |
+| `npm run dev:frontend` | Frontend dev server only |
+| `npm run build` | Build backend + frontend |
+| `npm run start:prod` | Serve backend API on `:4000` |
+| `npm run prisma:seed` | Seed default workspace |
+| `npm run setup` | Full first-time setup |
+
+## API Endpoints
+
+**Base URL**: `http://localhost:4000/api`
+
+### Auth
+All `/api` routes require `Authorization: Bearer <STACKHAND_API_TOKEN>` header.  
+The `/api/health` endpoint is public.
+
+### Modules & Endpoints
+
+| Module | Endpoints |
+|---|---|
+| **Health** | `GET /api/health` |
+| **Workspaces** | `GET/POST /api/workspaces`, `GET/PATCH/DELETE /api/workspaces/:id`, `POST /api/workspaces/validate-path` |
+| **Filesystem** | `POST /api/filesystem/browse`, `read`, `write`, `create-folder`, `rename`, `delete`, `duplicate` |
+| **Stacks** | `GET /api/workspaces/:wid/stacks`, `POST /api/workspaces/:wid/stacks`, `GET/POST/DELETE /api/stacks/:id`, `POST /api/stacks/:id/up\|down\|restart`, `GET /api/stacks/:id/logs` |
+| **Containers** | `GET /api/containers`, `GET/:id`, `POST/:id/start\|stop\|restart`, `DELETE/:id`, `GET/:id/stats` |
+| **Images** | `GET /api/images`, `GET /api/images/search?q=`, `POST /api/images/pull`, `DELETE /api/images/:name` |
+| **Ollama** | `GET /api/ollama/status\|models`, `POST /api/ollama/chat`, `POST /api/ollama/generate-stack` |
+| **Dashboard** | `GET /api/dashboard` |
+| **Settings** | `GET\|PUT /api/settings` |
+| **Swagger** | `GET /api/docs` (interactive API documentation) |
+
+### WebSocket Events (Socket.IO)
+
+| Event | Direction | Description |
+|---|---|---|
+| `stack:logs` | Client→Server | Subscribe to live compose logs |
+| `stack:logs:stop` | Client→Server | Stop log streaming |
+| `stack:compose-progress` | Client→Server | Subscribe to compose up/down output |
+| `container:stats` | Client→Server | Subscribe to real-time container stats (3s interval) |
+| `container:stats:stop` | Client→Server | Stop stats polling |
+| `image:pull-progress` | Client→Server | Subscribe to image pull progress |
+| `ollama:chat-stream` | Client→Server | Stream AI chat response tokens |
+
+## Environment Variables
+
+See `.env.example`. Key variables:
+
+- `STACKHAND_API_TOKEN` — Bearer token for API auth (required)
+- `PORT` — Backend port (default: 4000)
+- `OLLAMA_BASE_URL` — Ollama API endpoint (default: http://localhost:11434)
+- `DATABASE_URL` — SQLite database path
+
+## Fake (Simulated) Mode
+
+The frontend can run entirely client-side with mock data using the TanStack Start dev server.  
+No backend needed — all data is stored in-memory and localStorage.
+
+To run in fake mode:
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+cd client && npm run dev
 ```
 
-## Deployment
+## Real Mode (Backend + Frontend)
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+Run both servers for the full experience:
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+npm run dev
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+The frontend (port 3000) proxies API calls to the backend (port 4000).  
+The backend serves Swagger docs at `/api/docs`.
 
-## Resources
+### Prerequisites
 
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- Node.js 20+
+- Docker Engine running (for container/stack features)
+- Ollama running (optional, for AI features)

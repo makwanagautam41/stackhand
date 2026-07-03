@@ -13,8 +13,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { MOCK_REGISTRY } from "@/lib/mock-data";
 import type { RegistryImage } from "@/lib/types";
+import { api } from "@/lib/api";
 import {
   Dialog,
   DialogContent,
@@ -38,52 +38,6 @@ export const Route = createFileRoute("/_app/registry")({
   head: () => ({ meta: [{ title: "Registry · Stackhand" }] }),
 });
 
-function formatPulls(n: number): string {
-  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
-  if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
-  return String(n);
-}
-
-async function searchDockerHub(query: string): Promise<RegistryImage[]> {
-  const url = query
-    ? `https://hub.docker.com/v2/search/repositories/?query=${encodeURIComponent(query)}&page_size=24`
-    : `https://hub.docker.com/v2/search/repositories/?query=library&page_size=24`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Docker Hub ${res.status}`);
-  const json = (await res.json()) as {
-    results: Array<{
-      repo_name: string;
-      short_description?: string;
-      star_count: number;
-      pull_count: number;
-      is_official: boolean;
-    }>;
-  };
-  return json.results.map((r) => {
-    const [ns, name] = r.repo_name.includes("/")
-      ? r.repo_name.split("/")
-      : ["library", r.repo_name];
-    return {
-      namespace: ns,
-      name,
-      description: r.short_description ?? "",
-      stars: r.star_count,
-      pulls: formatPulls(r.pull_count),
-      official: r.is_official,
-      tags: [],
-    };
-  });
-}
-
-async function fetchTags(namespace: string, name: string): Promise<string[]> {
-  const url = `https://hub.docker.com/v2/repositories/${namespace}/${name}/tags/?page_size=25&ordering=last_updated`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`tags ${res.status}`);
-  const json = (await res.json()) as { results: Array<{ name: string }> };
-  return json.results.map((t) => t.name);
-}
-
 function RegistryPage() {
   const [q, setQ] = useState("");
   const [images, setImages] = useState<RegistryImage[]>([]);
@@ -100,22 +54,14 @@ function RegistryPage() {
     setLoading(true);
     const t = setTimeout(async () => {
       try {
-        const results = await searchDockerHub(q.trim());
+        const results = await api.searchDockerHub(q.trim());
         if (!cancelled) {
           setImages(results);
           setLive(true);
         }
       } catch {
         if (!cancelled) {
-          setImages(
-            MOCK_REGISTRY.filter(
-              (i) =>
-                !q ||
-                i.name.includes(q.toLowerCase()) ||
-                i.description.toLowerCase().includes(q.toLowerCase()),
-            ),
-          );
-          setLive(false);
+          toast.error("Failed to search registry");
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -133,7 +79,7 @@ function RegistryPage() {
     if (img.tags.length === 0) {
       setTagsLoading(true);
       try {
-        const tags = await fetchTags(img.namespace, img.name);
+        const tags = await api.getImageTags(img.namespace, img.name);
         const withDefault = tags.length ? tags : ["latest"];
         setPicked({ ...img, tags: withDefault });
         setTag(withDefault[0]);
@@ -147,21 +93,18 @@ function RegistryPage() {
     }
   };
 
-  const pull = () => {
+  const pull = async () => {
     setPulling(true);
-    setProgress(0);
-    const t = setInterval(() => {
-      setProgress((p) => {
-        if (p >= 100) {
-          clearInterval(t);
-          setPulling(false);
-          toast.success(`Pulled ${picked?.namespace}/${picked?.name}:${tag}`);
-          setPicked(null);
-          return 100;
-        }
-        return p + 10 + Math.random() * 15;
-      });
-    }, 250);
+    try {
+      const name = `${picked?.namespace}/${picked?.name}:${tag}`;
+      await api.pullImage(name);
+      toast.success(`Pulled ${name}`);
+      setPicked(null);
+    } catch (e: any) {
+      toast.error(e.message ?? "Pull failed");
+    } finally {
+      setPulling(false);
+    }
   };
 
   return (

@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { api } from "@/lib/api";
 import {
   IconServer,
   IconDatabase,
@@ -25,9 +26,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/empty-state";
-import { STACK_TEMPLATES } from "@/lib/mock-data";
 import { useWorkspaces } from "@/lib/workspace-store";
-import type { StackTemplate, Stack } from "@/lib/types";
+import type { StackTemplate } from "@/lib/types";
 
 export const Route = createFileRoute("/_app/templates")({
   component: TemplatesPage,
@@ -46,38 +46,55 @@ const ICONS: Record<string, React.ComponentType<{ className?: string; stroke?: n
 function TemplatesPage() {
   const { current, addStack } = useWorkspaces();
   const navigate = useNavigate();
+  const [templates, setTemplates] = useState<StackTemplate[]>([]);
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<string>("All");
   const [picked, setPicked] = useState<StackTemplate | null>(null);
   const [name, setName] = useState("");
 
-  const cats = ["All", ...Array.from(new Set(STACK_TEMPLATES.map((t) => t.category)))];
-  const filtered = STACK_TEMPLATES.filter(
+  useEffect(() => {
+    api.listTemplates().then((data) => {
+      const mapped: StackTemplate[] = (data ?? []).map((t: any) => ({
+        id: t.id,
+        name: t.name,
+        description: t.description ?? "",
+        icon: t.icon ?? "IconTemplate",
+        color: t.color ?? "#6366f1",
+        tags: t.tags ?? [],
+        yaml: t.yaml ?? "",
+        category: t.category ?? "Other",
+      }));
+      setTemplates(mapped);
+    });
+  }, []);
+
+  const cats = ["All", ...Array.from(new Set(templates.map((t) => t.category)))];
+  const filtered = templates.filter(
     (t) =>
       (cat === "All" || t.category === cat) &&
       (t.name.toLowerCase().includes(q.toLowerCase()) ||
         t.tags.join(" ").toLowerCase().includes(q.toLowerCase())),
   );
 
-  const create = () => {
+  const create = async () => {
     if (!current || !picked) return;
-    const stack: Stack = {
-      id: crypto.randomUUID(),
-      workspaceId: current.id,
-      name: name.trim() || picked.name.toLowerCase(),
-      yamlPath: `/stacks/${(name.trim() || picked.name.toLowerCase()).replace(/\s+/g, "-")}/docker-compose.yml`,
-      status: "stopped",
-      services: [picked.name.toLowerCase()],
-      lastModified: "just now",
-      yaml: picked.yaml,
-      runningYaml: picked.yaml,
-      containers: [],
-    };
-    addStack(current.id, stack);
-    toast.success(`Stack "${stack.name}" created from ${picked.name}`);
-    setPicked(null);
-    setName("");
-    navigate({ to: "/stacks/$stackId", params: { stackId: stack.id } });
+    const stackName = name.trim() || picked.name.toLowerCase();
+    // Substitute {{name}} placeholder in the template YAML
+    const finalYaml = picked.yaml.replace(/\{\{name\}\}/g, stackName);
+    try {
+      const created = await api.createStack(current.id, {
+        name: stackName,
+        yaml: finalYaml,
+        folderName: stackName.replace(/[^a-z0-9-]/g, '-'),
+      });
+      addStack(current.id, { ...created, workspaceId: current.id });
+      toast.success(`Stack "${stackName}" created from ${picked.name}`);
+      setPicked(null);
+      setName("");
+      navigate({ to: "/stacks/$stackId", params: { stackId: created.id } });
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to create stack");
+    }
   };
 
   return (

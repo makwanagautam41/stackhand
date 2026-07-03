@@ -27,7 +27,7 @@ export function ResourceLimitsEditor({
 
   const apply = () => {
     onChange(local);
-    toast.success("Resource limits applied (simulated)");
+    toast.success("Resource limits applied");
   };
 
   return (

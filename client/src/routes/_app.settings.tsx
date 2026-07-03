@@ -41,6 +41,7 @@ import { FolderPicker } from "@/components/folder-picker";
 import { useWorkspaces } from "@/lib/workspace-store";
 import { useTheme, type Theme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
 import { WORKSPACE_COLORS, WORKSPACE_ICONS, DEFAULT_MODELS } from "@/lib/mock-data";
 import { getWorkspaceIcon } from "@/lib/icon-map";
 
@@ -71,28 +72,37 @@ function SettingsPage() {
 
   if (!current) return null;
 
-  const save = () => {
-    updateWorkspace(current.id, { name: name.trim() || current.name, color, icon });
-    toast.success("Workspace updated");
+  const save = async () => {
+    try {
+      await api.updateWorkspace(current.id, { name: name.trim() || current.name, color, icon });
+      updateWorkspace(current.id, { name: name.trim() || current.name, color, icon });
+      toast.success("Workspace updated");
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to update workspace");
+    }
   };
 
   const toggleModel = (id: string, enabled: boolean) => {
     const models = (current.models.length > 0 ? current.models : DEFAULT_MODELS).map((m) =>
       m.id === id ? { ...m, enabled } : m,
     );
-    updateWorkspace(current.id, { models, ollamaConnected: true });
+    updateWorkspace(current.id, { models, ollamaConnected: true } as any);
   };
 
-  const refreshModels = () => {
+  const refreshModels = async () => {
     setRefreshing(true);
-    setTimeout(() => {
+    try {
+      const models = await api.ollamaModels();
       updateWorkspace(current.id, {
         ollamaConnected: true,
-        models: DEFAULT_MODELS.map((m) => ({ ...m })),
-      });
-      setRefreshing(false);
+        models: models.map((m) => ({ id: m.id, name: m.name, size: `${m.size}`, enabled: true })),
+      } as any);
       toast.success("Models refreshed");
-    }, 1000);
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to fetch models");
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const modelList = current.models.length > 0 ? current.models : DEFAULT_MODELS;
@@ -388,10 +398,15 @@ function SettingsPage() {
               Cancel
             </Button>
             <Button
-              onClick={() => {
-                updateWorkspace(current.id, { rootFolder: tempFolder });
-                setFolderOpen(false);
-                toast.success("Root folder updated");
+              onClick={async () => {
+                try {
+                  await api.updateWorkspace(current.id, { rootFolderPath: tempFolder });
+                  updateWorkspace(current.id, { rootFolderPath: tempFolder });
+                  setFolderOpen(false);
+                  toast.success("Root folder updated");
+                } catch (e: any) {
+                  toast.error(e.message ?? "Failed to update root folder");
+                }
               }}
             >
               Save
@@ -413,12 +428,17 @@ function SettingsPage() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
+              onClick={async () => {
                 const id = current.id;
-                deleteWorkspace(id);
-                setDeleteOpen(false);
-                toast.success("Workspace deleted");
-                navigate({ to: "/" });
+                try {
+                  await api.deleteWorkspace(id);
+                  deleteWorkspace(id);
+                  setDeleteOpen(false);
+                  toast.success("Workspace deleted");
+                  navigate({ to: "/" });
+                } catch (e: any) {
+                  toast.error(e.message ?? "Failed to delete workspace");
+                }
               }}
             >
               Delete workspace
