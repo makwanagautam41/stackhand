@@ -150,6 +150,13 @@ export const api = {
   },
 
   // ---- Filesystem ----
+  async getFileTree(basePath: string, subPath?: string) {
+    return request<YamlFile>("/filesystem/tree", {
+      method: "POST",
+      body: JSON.stringify({ basePath, subPath }),
+    });
+  },
+
   async browseFolder(basePath: string, subPath?: string) {
     return request<{ name: string; type: string; size: number; modifiedAt: string }[]>("/filesystem/browse", {
       method: "POST",

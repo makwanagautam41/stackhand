@@ -186,12 +186,25 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     loadWorkspaces();
   }, [loadWorkspaces]);
 
+  const loadTree = useCallback(async () => {
+    if (!currentId) return;
+    const ws = workspaces.find((w) => w.id === currentId);
+    if (!ws) return;
+    try {
+      const tree = await api.getFileTree(ws.rootFolder);
+      if (tree) {
+        setTreeByWs((prev) => ({ ...prev, [currentId]: tree }));
+      }
+    } catch {}
+  }, [currentId, workspaces]);
+
   useEffect(() => {
     if (currentId) {
       loadStacks();
       loadDashboard();
+      loadTree();
     }
-  }, [currentId, loadStacks, loadDashboard]);
+  }, [currentId, loadStacks, loadDashboard, loadTree]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -230,7 +243,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     await loadWorkspaces();
     await loadStacks();
     await loadDashboard();
-  }, [loadWorkspaces, loadStacks, loadDashboard]);
+    await loadTree();
+  }, [loadWorkspaces, loadStacks, loadDashboard, loadTree]);
 
   const refreshStacks = useCallback(async () => {
     await loadStacks();
@@ -339,6 +353,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const updateYamlFile = useCallback(
     (workspaceId: string, fileId: string, content: string) => {
+      let targetPath = "";
       setTreeByWs((prev) => {
         const root = prev[workspaceId];
         if (!root) return prev;
@@ -346,6 +361,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         const walk = (node: YamlFile): boolean => {
           if (node.id === fileId) {
             node.content = content;
+            targetPath = node.path;
             return true;
           }
           if (node.children) for (const c of node.children) if (walk(c)) return true;
@@ -354,12 +370,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         walk(clone);
         return { ...prev, [workspaceId]: clone };
       });
+      if (targetPath) {
+        api.writeFile(targetPath, content).catch(() => loadTree());
+      }
     },
-    [],
+    [loadTree],
   );
 
   const updateYamlEnv = useCallback(
     (workspaceId: string, fileId: string, env: EnvVar[]) => {
+      let targetDir = "";
       setTreeByWs((prev) => {
         const root = prev[workspaceId];
         if (!root) return prev;
@@ -367,6 +387,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         const walk = (node: YamlFile): boolean => {
           if (node.id === fileId) {
             node.env = env;
+            targetDir = node.path.replace(/\/[^/]+$/, "");
             return true;
           }
           if (node.children) for (const c of node.children) if (walk(c)) return true;
@@ -375,8 +396,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         walk(clone);
         return { ...prev, [workspaceId]: clone };
       });
+      if (targetDir) {
+        const content = env.map(e => `${e.key}=${e.value}`).join("\n");
+        api.writeFile(`${targetDir}/.env`, content).catch(() => loadTree());
+      }
     },
-    [],
+    [loadTree],
   );
 
   const mutateTree = useCallback(
@@ -411,9 +436,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const renameYamlNode = useCallback(
     (workspaceId: string, fileId: string, newName: string) => {
+      let oldPath = "";
       mutateTree(workspaceId, (root) => {
         const node = findNode(root, fileId);
         if (!node) return;
+        oldPath = node.path;
         node.name = newName;
         node.path = node.path.replace(/[^/]+$/, newName);
         if (node.children) {
@@ -424,29 +451,40 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           node.children.forEach((c) => fix(c, node.path));
         }
       });
+      if (oldPath) {
+        api.renameNode(oldPath, newName).catch(() => loadTree());
+      }
     },
-    [mutateTree],
+    [mutateTree, loadTree],
   );
 
   const deleteYamlNode = useCallback(
     (workspaceId: string, fileId: string) => {
+      let targetPath = "";
       mutateTree(workspaceId, (root) => {
+        const node = findNode(root, fileId);
+        if (node) targetPath = node.path;
         const parent = findParent(root, fileId);
         if (!parent || !parent.children) return;
         const idx = parent.children.findIndex((c) => c.id === fileId);
         if (idx >= 0) parent.children.splice(idx, 1);
       });
+      if (targetPath) {
+        api.deleteNode(targetPath).catch(() => loadTree());
+      }
     },
-    [mutateTree],
+    [mutateTree, loadTree],
   );
 
   const duplicateYamlNode = useCallback(
     (workspaceId: string, fileId: string): string | null => {
+      let targetPath = "";
       let newId: string | null = null;
       mutateTree(workspaceId, (root) => {
         const parent = findParent(root, fileId);
         const node = findNode(root, fileId);
         if (!parent || !parent.children || !node) return;
+        targetPath = node.path;
         const stamp = (n: YamlFile, parentPath: string, isRoot: boolean) => {
           const parts = n.name.split(".");
           if (parts.length > 1) {
@@ -465,33 +503,46 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         const idx = parent.children.findIndex((c) => c.id === fileId);
         parent.children.splice(idx + 1, 0, clone);
       });
+      if (targetPath) {
+        api.duplicateFile(targetPath).then(() => loadTree()).catch(() => loadTree());
+      }
       return newId;
     },
-    [mutateTree],
+    [mutateTree, loadTree],
   );
 
   const createYamlChild = useCallback(
     (workspaceId: string, parentId: string, name: string, isDir: boolean): string | null => {
+      let targetParentPath = "";
       let newId: string | null = null;
+      const content = isDir ? "" : `# ${name}\n`;
       mutateTree(workspaceId, (root) => {
         const parent = findNode(root, parentId);
         if (!parent || !parent.isDir) return;
+        targetParentPath = parent.path;
         parent.children ??= [];
         const child: YamlFile = {
           id: crypto.randomUUID(),
           name,
           path: `${parent.path}/${name}`,
           isDir,
-          content: isDir ? "" : `# ${name}\n`,
+          content,
           children: isDir ? [] : undefined,
           env: isDir ? undefined : [],
         };
         newId = child.id;
         parent.children.push(child);
       });
+      if (targetParentPath) {
+        if (isDir) {
+          api.createFolder(targetParentPath, name).catch(() => loadTree());
+        } else {
+          api.writeFile(`${targetParentPath}/${name}`, content).catch(() => loadTree());
+        }
+      }
       return newId;
     },
-    [mutateTree],
+    [mutateTree, loadTree],
   );
 
   const appendChat = useCallback((workspaceId: string, msg: ChatMessage) => {

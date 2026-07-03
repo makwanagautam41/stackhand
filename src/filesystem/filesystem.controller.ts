@@ -15,6 +15,12 @@ export class FilesystemController {
     return this.service.browse(dto.basePath, dto.subPath);
   }
 
+  @Post('tree')
+  @ApiOperation({ summary: 'Get full recursive file tree' })
+  getTree(@Body() dto: BrowseFolderDto) {
+    return this.service.getTree(dto.basePath, dto.subPath);
+  }
+
   @Post('read')
   @ApiOperation({ summary: 'Read file content' })
   readFile(@Body() dto: ReadFileDto) {

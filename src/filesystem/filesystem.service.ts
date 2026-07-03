@@ -24,6 +24,42 @@ export class FilesystemService {
     });
   }
 
+  getTree(basePath: string, subPath?: string) {
+    const target = subPath ? resolveSafePath(basePath, subPath) : path.resolve(basePath);
+    if (!fs.existsSync(target)) return null;
+
+    const buildTree = (currentPath: string): any => {
+      const stat = fs.statSync(currentPath);
+      const name = path.basename(currentPath);
+      const isDir = stat.isDirectory();
+      
+      const node: any = {
+        id: Buffer.from(currentPath).toString('base64'),
+        path: currentPath,
+        name: name,
+        isDir: isDir,
+        content: '',
+      };
+
+      if (isDir) {
+        const entries = fs.readdirSync(currentPath, { withFileTypes: true });
+        node.children = entries
+          .filter(e => e.name !== '.git' && e.name !== 'node_modules')
+          .map(e => buildTree(path.join(currentPath, e.name)));
+      } else {
+        const ext = path.extname(currentPath).toLowerCase();
+        if (this.allowedExtensions.includes(ext)) {
+          node.content = fs.readFileSync(currentPath, 'utf-8');
+        } else {
+          node.content = 'Binary or unsupported file';
+        }
+      }
+      return node;
+    };
+
+    return buildTree(target);
+  }
+
   readFile(filePath: string) {
     const ext = path.extname(filePath).toLowerCase();
     if (!this.allowedExtensions.includes(ext)) {

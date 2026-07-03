@@ -6,9 +6,10 @@ import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { spawn } from 'child_process';
 import Dockerode from 'dockerode';
+import { getDockerClient } from '../common/docker-client';
 import { STACK_TEMPLATES, StackTemplate } from './templates';
 
-const docker = new Dockerode();
+const docker = getDockerClient();
 
 @Injectable()
 export class StackService {

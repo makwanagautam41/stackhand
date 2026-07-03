@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import Dockerode from 'dockerode';
+import { getDockerClient } from '../common/docker-client';
 
-const docker = new Dockerode();
+const docker = getDockerClient();
 
 @Injectable()
 export class ContainerService {
