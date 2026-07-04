@@ -1,5 +1,10 @@
 import { Link } from "@tanstack/react-router";
-import { IconActivity, IconCircleFilled, IconTerminal2, IconBrandDocker } from "@tabler/icons-react";
+import {
+  IconActivity,
+  IconCircleFilled,
+  IconTerminal2,
+  IconBrandDocker,
+} from "@tabler/icons-react";
 import { useWorkspaces } from "@/lib/workspace-store";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
@@ -7,7 +12,7 @@ import { api } from "@/lib/api";
 
 export function StatusBar() {
   const { current, stacksByWs } = useWorkspaces();
-  const stacks = current ? stacksByWs[current.id] ?? [] : [];
+  const stacks = current ? (stacksByWs[current.id] ?? []) : [];
   const running = stacks.reduce(
     (n, s) => n + s.containers.filter((c) => c.status === "running").length,
     0,
@@ -21,7 +26,10 @@ export function StatusBar() {
 
   useEffect(() => {
     const check = () => {
-      api.dockerStatus().then((s) => setDockerRunning(s.running)).catch(() => setDockerRunning(false));
+      api
+        .dockerStatus()
+        .then((s) => setDockerRunning(s.running))
+        .catch(() => setDockerRunning(false));
     };
     check();
     const t = setInterval(check, 10000);
@@ -33,7 +41,7 @@ export function StatusBar() {
       <div className="flex items-center gap-1.5">
         <IconTerminal2 className="h-3 w-3" stroke={2} />
         <span className="text-foreground/80">stackhand</span>
-        <span className="opacity-40">v0.1.0</span>
+        <span className="opacity-40">v1.0.0</span>
       </div>
       <span className="opacity-30">|</span>
       <div className="flex items-center gap-1.5">
@@ -49,11 +57,19 @@ export function StatusBar() {
         <span
           className={cn(
             "inline-block h-2 w-2 rounded-full",
-            dockerRunning === true ? "bg-emerald-500" : dockerRunning === false ? "bg-red-500" : "bg-muted-foreground/50",
+            dockerRunning === true
+              ? "bg-emerald-500"
+              : dockerRunning === false
+                ? "bg-red-500"
+                : "bg-muted-foreground/50",
           )}
         />
         <span>
-          {dockerRunning === null ? "checking..." : dockerRunning ? "Docker running" : "Docker not running"}
+          {dockerRunning === null
+            ? "checking..."
+            : dockerRunning
+              ? "Docker running"
+              : "Docker not running"}
         </span>
       </div>
       <span className="opacity-30">|</span>
@@ -75,9 +91,7 @@ export function StatusBar() {
         {errored > 0 && <span className="text-destructive">· {errored} error</span>}
       </Link>
       <div className="ml-auto flex items-center gap-3">
-        <span className="hidden sm:inline">press ? for shortcuts</span>
-        <span className="hidden sm:inline opacity-40">|</span>
-        <span>ready</span>
+        <span className="hidden sm:inline">press shift + ? for shortcuts</span>
       </div>
     </div>
   );

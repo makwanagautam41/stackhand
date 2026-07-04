@@ -62,7 +62,11 @@ export class WorkspaceService {
       const stat = fs.statSync(resolved);
       return { valid: stat.isDirectory(), path: resolved };
     } catch {
-      return { valid: false, path: resolved, error: 'Path does not exist or is not accessible' };
+      return {
+        valid: false,
+        path: resolved,
+        error: 'Path does not exist or is not accessible',
+      };
     }
   }
 }

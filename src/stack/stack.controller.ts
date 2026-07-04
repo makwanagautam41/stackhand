@@ -1,5 +1,19 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Param,
+  Body,
+  Query,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { StackService } from './stack.service';
 import { CreateStackDto } from './dto';
 
@@ -23,7 +37,10 @@ export class StackController {
 
   @Post('workspaces/:workspaceId/stacks')
   @ApiOperation({ summary: 'Create a new stack' })
-  create(@Param('workspaceId') workspaceId: string, @Body() dto: CreateStackDto) {
+  create(
+    @Param('workspaceId') workspaceId: string,
+    @Body() dto: CreateStackDto,
+  ) {
     return this.service.create({ ...dto, workspaceId });
   }
 
@@ -36,7 +53,10 @@ export class StackController {
   @Delete('stacks/:id')
   @ApiOperation({ summary: 'Delete stack' })
   @ApiQuery({ name: 'deleteFolder', required: false })
-  remove(@Param('id') id: string, @Query('deleteFolder') deleteFolder?: string) {
+  remove(
+    @Param('id') id: string,
+    @Query('deleteFolder') deleteFolder?: string,
+  ) {
     return this.service.remove(id, deleteFolder === 'true');
   }
 
@@ -73,7 +93,10 @@ export class StackController {
 
   @Post('stack-templates/:templateId/generate')
   @ApiOperation({ summary: 'Generate YAML from template with overrides' })
-  generateFromTemplate(@Param('templateId') templateId: string, @Body() overrides: Record<string, string>) {
+  generateFromTemplate(
+    @Param('templateId') templateId: string,
+    @Body() overrides: Record<string, string>,
+  ) {
     return this.service.generateFromTemplate(templateId, overrides);
   }
 }

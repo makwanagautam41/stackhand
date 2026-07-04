@@ -32,12 +32,12 @@ export class ImageService {
   }
 
   async pullImage(name: string) {
-    return new Promise<string>((resolve, reject) => {
+    return new Promise<{ message: string }>((resolve, reject) => {
       docker.pull(name, {}, (err: any, stream: any) => {
         if (err) return reject(err);
-        docker.modem.followProgress(stream, (pullErr: any) => {
+        (docker as any).followProgress(stream, (pullErr: any) => {
           if (pullErr) return reject(pullErr);
-          resolve(`Image ${name} pulled successfully`);
+          resolve({ message: `Image ${name} pulled successfully` });
         });
       });
     });

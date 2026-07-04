@@ -21,13 +21,19 @@ export class BackupController {
 
   @Post('workspaces/:workspaceId/backups/:snapshotName/restore')
   @ApiOperation({ summary: 'Restore workspace from a backup snapshot' })
-  restore(@Param('workspaceId') workspaceId: string, @Param('snapshotName') snapshotName: string) {
+  restore(
+    @Param('workspaceId') workspaceId: string,
+    @Param('snapshotName') snapshotName: string,
+  ) {
     return this.service.restoreBackup(workspaceId, snapshotName);
   }
 
   @Delete('workspaces/:workspaceId/backups/:snapshotName')
   @ApiOperation({ summary: 'Delete a backup snapshot' })
-  deleteBackup(@Param('workspaceId') workspaceId: string, @Param('snapshotName') snapshotName: string) {
+  deleteBackup(
+    @Param('workspaceId') workspaceId: string,
+    @Param('snapshotName') snapshotName: string,
+  ) {
     return this.service.deleteBackup(workspaceId, snapshotName);
   }
 }

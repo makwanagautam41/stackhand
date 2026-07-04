@@ -9,9 +9,13 @@ export class DockerController {
 
   @Get('status')
   @ApiOperation({ summary: 'Get Docker engine status' })
-  getStatus() { return this.service.getStatus(); }
+  getStatus() {
+    return this.service.getStatus();
+  }
 
   @Get('ping')
   @ApiOperation({ summary: 'Ping Docker engine' })
-  ping() { return this.service.ping(); }
+  ping() {
+    return this.service.ping();
+  }
 }

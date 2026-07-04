@@ -9,5 +9,7 @@ export class DashboardController {
 
   @Get()
   @ApiOperation({ summary: 'Get aggregated dashboard overview' })
-  getOverview() { return this.service.getOverview(); }
+  getOverview() {
+    return this.service.getOverview();
+  }
 }

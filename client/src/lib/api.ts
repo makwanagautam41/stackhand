@@ -293,6 +293,10 @@ export const api = {
     return request<{ message: string }>(`/containers/${id}/start`, { method: "POST" });
   },
 
+  async createContainer(data: { image: string; name?: string; port?: number; env?: Record<string, string>; volumes?: string[]; cmd?: string[] }) {
+    return request<{ id: string; name: string; image: string; status: string }>("/containers", { method: "POST", body: JSON.stringify(data) });
+  },
+
   async stopContainer(id: string) {
     return request<{ message: string }>(`/containers/${id}/stop`, { method: "POST" });
   },
@@ -352,6 +356,53 @@ export const api = {
 
   async pruneVolumes() {
     return request<{ message: string; reclaimed: number }>("/volumes/prune", { method: "POST" });
+  },
+
+  // ---- Volume Files ----
+  async browseVolumeFiles(name: string, subPath?: string) {
+    const qs = subPath ? `?path=${encodeURIComponent(subPath)}` : '';
+    return request<any>(`/volumes/${encodeURIComponent(name)}/files${qs}`);
+  },
+
+  async readVolumeFile(name: string, filePath: string) {
+    return request<{ path: string; content: string; size: number }>(`/volumes/${encodeURIComponent(name)}/files/read?path=${encodeURIComponent(filePath)}`);
+  },
+
+  async getVolumeUsage(name: string) {
+    return request<{ totalFiles: number; totalSize: number; mountpoint: string }>(`/volumes/${encodeURIComponent(name)}/usage`);
+  },
+
+  // ---- Registry ----
+  async registrySearch(query: string, page = 1, pageSize = 25) {
+    return request<{ results: any[]; total: number; page: number; pageSize: number }>(`/registry/search?q=${encodeURIComponent(query)}&page=${page}&pageSize=${pageSize}`);
+  },
+
+  async registryRepository(namespace: string, repo: string) {
+    return request<any>(`/registry/repository/${encodeURIComponent(namespace)}/${encodeURIComponent(repo)}`);
+  },
+
+  async registryTags(namespace: string, repo: string, page = 1, pageSize = 50) {
+    return request<{ results: any[]; total: number; page: number; pageSize: number }>(`/registry/repository/${encodeURIComponent(namespace)}/${encodeURIComponent(repo)}/tags?page=${page}&pageSize=${pageSize}`);
+  },
+
+  registryPullStreamUrl(name: string) {
+    return `/api/registry/pull-stream?name=${encodeURIComponent(name)}`;
+  },
+
+  async registryPull(name: string) {
+    return request<{ message: string }>("/registry/pull", { method: "POST", body: JSON.stringify({ name }) });
+  },
+
+  async registryGenerateCompose(data: { image: string; name?: string; port?: number; env?: Record<string, string>; volumes?: string[] }) {
+    return request<{ yaml: string; image: string; name: string }>("/registry/generate-compose", { method: "POST", body: JSON.stringify(data) });
+  },
+
+  async registrySaveToWorkspace(data: { workspaceRoot: string; folderName: string; yaml: string; description?: string }) {
+    return request<{ message: string; path: string }>("/registry/save-workspace", { method: "POST", body: JSON.stringify(data) });
+  },
+
+  async registryPopular() {
+    return request<{ title: string; query: string; images: any[] }[]>("/registry/popular");
   },
 
   // ---- Ollama ----

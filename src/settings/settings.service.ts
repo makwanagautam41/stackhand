@@ -6,7 +6,9 @@ export class SettingsService {
   constructor(private prisma: PrismaService) {}
 
   async getGlobal() {
-    const setting = await this.prisma.setting.findUnique({ where: { id: 'global' } });
+    const setting = await this.prisma.setting.findUnique({
+      where: { id: 'global' },
+    });
     return setting ? JSON.parse(setting.value) : {};
   }
 

@@ -15,6 +15,7 @@ import { SettingsModule } from './settings/settings.module';
 import { DockerModule } from './docker/docker.module';
 import { BackupModule } from './backup/backup.module';
 import { VolumeModule } from './volume/volume.module';
+import { RegistryModule } from './registry/registry.module';
 import { StackGateway } from './gateway/stack.gateway';
 import { HealthController } from './health.controller';
 import { APP_FILTER } from '@nestjs/core';
@@ -42,6 +43,7 @@ import { CommonModule } from './common/common.module';
     DockerModule,
     BackupModule,
     VolumeModule,
+    RegistryModule,
     CommonModule,
   ],
   controllers: [HealthController],

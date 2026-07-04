@@ -6,7 +6,10 @@ export class OllamaService {
   private baseUrl: string;
 
   constructor(private config: ConfigService) {
-    this.baseUrl = this.config.get<string>('OLLAMA_BASE_URL', 'http://localhost:11434');
+    this.baseUrl = this.config.get<string>(
+      'OLLAMA_BASE_URL',
+      'http://localhost:11434',
+    );
   }
 
   async status() {
@@ -37,7 +40,8 @@ export class OllamaService {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model, messages, stream: true }),
     });
-    if (!response.ok) throw new Error(`Ollama chat error: ${response.statusText}`);
+    if (!response.ok)
+      throw new Error(`Ollama chat error: ${response.statusText}`);
     const reader = response.body?.getReader();
     if (!reader) throw new Error('No response body');
     const decoder = new TextDecoder();
@@ -60,7 +64,10 @@ export class OllamaService {
     return { role: 'assistant', content: fullContent };
   }
 
-  async chatStream(model: string, messages: { role: string; content: string }[]): Promise<Response> {
+  async chatStream(
+    model: string,
+    messages: { role: string; content: string }[],
+  ): Promise<Response> {
     return fetch(`${this.baseUrl}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

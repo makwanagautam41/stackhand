@@ -5,7 +5,9 @@ export function resolveSafePath(basePath: string, userPath: string): string {
   const resolved = path.resolve(basePath, userPath);
   const normalizedBase = path.resolve(basePath);
   if (!resolved.startsWith(normalizedBase)) {
-    throw new Error('Path traversal detected: resolved path escapes allowed root');
+    throw new Error(
+      'Path traversal detected: resolved path escapes allowed root',
+    );
   }
   return resolved;
 }

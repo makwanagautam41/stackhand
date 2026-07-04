@@ -10,9 +10,13 @@ export class SettingsController {
 
   @Get()
   @ApiOperation({ summary: 'Get global settings' })
-  getGlobal() { return this.service.getGlobal(); }
+  getGlobal() {
+    return this.service.getGlobal();
+  }
 
   @Put()
   @ApiOperation({ summary: 'Update global settings' })
-  updateGlobal(@Body() value: Record<string, any>) { return this.service.updateGlobal(value); }
+  updateGlobal(@Body() value: Record<string, any>) {
+    return this.service.updateGlobal(value);
+  }
 }

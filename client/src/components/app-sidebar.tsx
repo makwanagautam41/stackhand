@@ -104,8 +104,7 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 {g.items.map((item) => {
-                  const active =
-                    pathname === item.to || pathname.startsWith(item.to + "/");
+                  const active = pathname === item.to || pathname.startsWith(item.to + "/");
                   return (
                     <SidebarMenuItem key={item.to}>
                       <SidebarMenuButton
@@ -127,11 +126,11 @@ export function AppSidebar() {
           </SidebarGroup>
         ))}
       </SidebarContent>
-      <SidebarFooter className="border-t p-3">
+      {/* <SidebarFooter className="border-t p-3">
         <p className="font-mono text-[10px] text-muted-foreground group-data-[collapsible=icon]:hidden">
           v0.1.0 · stackhand
         </p>
-      </SidebarFooter>
+      </SidebarFooter> */}
     </Sidebar>
   );
 }

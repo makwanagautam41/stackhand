@@ -1,7 +1,15 @@
 import { Controller, Post, Get, Body, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { FilesystemService } from './filesystem.service';
-import { BrowseFolderDto, ReadFileDto, WriteFileDto, CreateFolderDto, RenameNodeDto, DeleteNodeDto, DuplicateFileDto } from './dto';
+import {
+  BrowseFolderDto,
+  ReadFileDto,
+  WriteFileDto,
+  CreateFolderDto,
+  RenameNodeDto,
+  DeleteNodeDto,
+  DuplicateFileDto,
+} from './dto';
 
 @ApiTags('Filesystem')
 @ApiBearerAuth()

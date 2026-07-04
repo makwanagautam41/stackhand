@@ -3,7 +3,10 @@ import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 import * as fs from 'fs';
 import * as path from 'path';
 
-function resolveSqliteUrl(databaseUrl = process.env.DATABASE_URL || 'file:./workspaces-data/stackhand.db') {
+function resolveSqliteUrl(
+  databaseUrl = process.env.DATABASE_URL ||
+    'file:./workspaces-data/stackhand.db',
+) {
   const raw = databaseUrl.replace(/^file:/, '');
   if (path.isAbsolute(raw)) {
     return `file:${raw}`;

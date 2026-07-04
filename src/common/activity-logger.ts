@@ -11,7 +11,6 @@ export class ActivityLogger {
       await this.prisma.activity.create({
         data: { id: uuid(), workspaceId, kind, message, ts: new Date() },
       });
-    } catch {
-    }
+    } catch {}
   }
 }

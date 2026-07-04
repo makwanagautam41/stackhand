@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Param, Body, Res, HttpCode } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Param,
+  Body,
+  Res,
+  HttpCode,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { OllamaService } from './ollama.service';
 import type { Response } from 'express';
@@ -11,16 +19,23 @@ export class OllamaController {
 
   @Get('status')
   @ApiOperation({ summary: 'Check Ollama connection status' })
-  status() { return this.service.status(); }
+  status() {
+    return this.service.status();
+  }
 
   @Get('models')
   @ApiOperation({ summary: 'List locally installed Ollama models' })
-  models() { return this.service.models(); }
+  models() {
+    return this.service.models();
+  }
 
   @Post('chat')
   @ApiOperation({ summary: 'Chat with an Ollama model (non-streaming)' })
   @HttpCode(200)
-  async chat(@Body('model') model: string, @Body('messages') messages: { role: string; content: string }[]) {
+  async chat(
+    @Body('model') model: string,
+    @Body('messages') messages: { role: string; content: string }[],
+  ) {
     return this.service.chat(model, messages);
   }
 
@@ -49,7 +64,9 @@ export class OllamaController {
   }
 
   @Post('generate-stack')
-  @ApiOperation({ summary: 'Generate a docker-compose.yml from a description via Ollama' })
+  @ApiOperation({
+    summary: 'Generate a docker-compose.yml from a description via Ollama',
+  })
   @HttpCode(200)
   generateStack(@Body('description') description: string) {
     return this.service.generateStack(description);

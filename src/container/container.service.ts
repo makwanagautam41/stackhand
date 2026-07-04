@@ -32,7 +32,7 @@ export class ContainerService {
       name: info.Name.replace(/^\//, ''),
       image: info.Config.Image,
       status: info.State.Status,
-      ports: (info.NetworkSettings?.Ports ?? {}),
+      ports: info.NetworkSettings?.Ports ?? {},
       env: info.Config.Env,
       mounts: info.Mounts?.map((m) => ({
         source: m.Source,
@@ -71,9 +71,15 @@ export class ContainerService {
   async stats(id: string): Promise<any> {
     const container = docker.getContainer(id);
     const stats = await container.stats({ stream: false });
-    const cpuDelta = stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage;
-    const systemDelta = stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
-    const cpuPercent = systemDelta > 0 ? (cpuDelta / systemDelta) * stats.cpu_stats.online_cpus * 100 : 0;
+    const cpuDelta =
+      stats.cpu_stats.cpu_usage.total_usage -
+      stats.precpu_stats.cpu_usage.total_usage;
+    const systemDelta =
+      stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
+    const cpuPercent =
+      systemDelta > 0
+        ? (cpuDelta / systemDelta) * stats.cpu_stats.online_cpus * 100
+        : 0;
     const memUsage = stats.memory_stats.usage ?? 0;
     const memLimit = stats.memory_stats.limit ?? 1;
     const memPercent = (memUsage / memLimit) * 100;
@@ -86,13 +92,57 @@ export class ContainerService {
     };
   }
 
+  async create(data: {
+    image: string;
+    name?: string;
+    port?: number;
+    env?: Record<string, string>;
+    volumes?: string[];
+    cmd?: string[];
+  }) {
+    const createOptions: Dockerode.ContainerCreateOptions = {
+      Image: data.image,
+      name: data.name,
+      Env: data.env
+        ? Object.entries(data.env).map(([k, v]) => `${k}=${v}`)
+        : undefined,
+      ExposedPorts: data.port ? { [`${data.port}/tcp`]: {} } : undefined,
+      HostConfig: {
+        PortBindings: data.port
+          ? { [`${data.port}/tcp`]: [{ HostPort: String(data.port) }] }
+          : undefined,
+        Binds: data.volumes,
+      },
+      Cmd: data.cmd,
+    };
+    const container = await docker.createContainer(createOptions);
+    await container.start();
+    const info = await container.inspect();
+    return {
+      id: info.Id,
+      name: info.Name.replace(/^\//, ''),
+      image: info.Config.Image,
+      status: info.State.Status,
+    };
+  }
+
   async logs(id: string, tail = 200): Promise<string> {
     return new Promise((resolve, reject) => {
-      const child = cp.spawn('docker', ['logs', '--tail', String(tail), '--timestamps', id]);
+      const child = cp.spawn('docker', [
+        'logs',
+        '--tail',
+        String(tail),
+        '--timestamps',
+        id,
+      ]);
       let stdout = '';
       let stderr = '';
-      child.stdout?.on('data', (d: Buffer) => { stdout += d.toString(); });
-      child.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });
+      child.stdout?.on('data', (d: Buffer) => {
+        stdout += d.toString();
+      });
+      child.stderr?.on('data', (d: Buffer) => {
+        stderr += d.toString();
+      });
       child.on('close', (code) => {
         const output = stdout + stderr;
         resolve(output || 'No logs available');

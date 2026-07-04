@@ -1,12 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { IconPhoto, IconTrash, IconRefresh, IconSearch } from "@tabler/icons-react";
+import { IconPhoto, IconTrash, IconRefresh, IconSearch, IconPlayerPlay } from "@tabler/icons-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +46,12 @@ function ImagesPage() {
   const [removeFor, setRemoveFor] = useState<BackendImage | null>(null);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
 
+  /* run container dialog */
+  const [runImage, setRunImage] = useState<{ name: string } | null>(null);
+  const [runPort, setRunPort] = useState("");
+  const [runName, setRunName] = useState("");
+  const [runCreating, setRunCreating] = useState(false);
+
   const fetchImages = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
@@ -65,6 +80,27 @@ function ImagesPage() {
     } finally {
       setBusy((b) => ({ ...b, [tag]: false }));
       setRemoveFor(null);
+    }
+  };
+
+  const doRunContainer = async () => {
+    if (!runImage) return;
+    setRunCreating(true);
+    try {
+      const port = runPort ? parseInt(runPort, 10) : undefined;
+      const res = await api.createContainer({
+        image: runImage.name,
+        name: runName || undefined,
+        port,
+      });
+      toast.success(`Container "${res.name}" started from ${runImage.name}`);
+      setRunImage(null);
+      setRunName("");
+      setRunPort("");
+    } catch (e: any) {
+      toast.error(`Failed to create container: ${e.message}`);
+    } finally {
+      setRunCreating(false);
     }
   };
 
@@ -158,15 +194,24 @@ function ImagesPage() {
                         {new Date(img.created * 1000).toLocaleDateString()}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="text-destructive hover:text-destructive"
-                          disabled={isBusy}
-                          onClick={() => setRemoveFor(img)}
-                        >
-                          <IconTrash className="h-4 w-4" stroke={1.75} />
-                        </Button>
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setRunImage({ name: tag })}
+                          >
+                            <IconPlayerPlay className="h-4 w-4" stroke={1.75} />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive"
+                            disabled={isBusy}
+                            onClick={() => setRemoveFor(img)}
+                          >
+                            <IconTrash className="h-4 w-4" stroke={1.75} />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -176,6 +221,42 @@ function ImagesPage() {
           </div>
         )}
       </Card>
+
+      {/* run container dialog */}
+      <Dialog open={!!runImage} onOpenChange={(o) => { if (!o) { setRunImage(null); setRunName(""); setRunPort(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Run Container</DialogTitle>
+            <DialogDescription className="font-mono">{runImage?.name}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1">
+              <Label>Container name (optional)</Label>
+              <Input
+                value={runName}
+                onChange={(e) => setRunName(e.target.value)}
+                placeholder={runImage?.name.split("/").pop()?.split(":")[0] || "my-container"}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Port (optional)</Label>
+              <Input
+                value={runPort}
+                onChange={(e) => setRunPort(e.target.value)}
+                placeholder="e.g. 8080"
+                type="number"
+              />
+              <p className="text-xs text-muted-foreground">Exposes container port on the same host port</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setRunImage(null); setRunName(""); setRunPort(""); }}>Cancel</Button>
+            <Button onClick={doRunContainer} disabled={runCreating}>
+              {runCreating ? "Creating…" : "Create & Start"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!removeFor} onOpenChange={(v) => !v && setRemoveFor(null)}>
         <AlertDialogContent>

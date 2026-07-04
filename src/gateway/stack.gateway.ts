@@ -12,6 +12,9 @@ import { StackService } from '../stack/stack.service';
 import { ContainerService } from '../container/container.service';
 import { ImageService } from '../image/image.service';
 import { ChildProcess } from 'child_process';
+import { getDockerClient } from '../common/docker-client';
+
+const docker = getDockerClient();
 
 interface StreamState {
   process: ChildProcess;
@@ -92,20 +95,32 @@ export class StackGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { stackId: string; tail?: number },
   ) {
     try {
-      const stack = await this.stackService['prisma'].stack.findUnique({ where: { id: data.stackId } });
+      const stack = await this.stackService['prisma'].stack.findUnique({
+        where: { id: data.stackId },
+      });
       if (!stack) {
         client.emit('error', { message: 'Stack not found' });
         return;
       }
-      const child = this.stackService.getComposeChild(stack.folderPath, 'logs', ['-f', '--tail', String(data.tail ?? 200)]);
+      const child = this.stackService.getComposeChild(
+        stack.folderPath,
+        'logs',
+        ['-f', '--tail', String(data.tail ?? 200)],
+      );
       const key = `logs:${data.stackId}:${client.id}`;
       this.activeStreams.set(key, { process: child, clientId: client.id });
 
       child.stdout?.on('data', (d: Buffer) => {
-        client.emit('stack:logs', { stackId: data.stackId, line: d.toString() });
+        client.emit('stack:logs', {
+          stackId: data.stackId,
+          line: d.toString(),
+        });
       });
       child.stderr?.on('data', (d: Buffer) => {
-        client.emit('stack:logs', { stackId: data.stackId, line: d.toString() });
+        client.emit('stack:logs', {
+          stackId: data.stackId,
+          line: d.toString(),
+        });
       });
       child.on('close', () => {
         client.emit('stack:logs:end', { stackId: data.stackId });
@@ -134,18 +149,33 @@ export class StackGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { stackId: string; action: 'up' | 'down' },
   ) {
     try {
-      const stack = await this.stackService['prisma'].stack.findUnique({ where: { id: data.stackId } });
-      if (!stack) { client.emit('error', { message: 'Stack not found' }); return; }
-      const child = this.stackService.getComposeChild(stack.folderPath, data.action, data.action === 'up' ? ['-d'] : []);
+      const stack = await this.stackService['prisma'].stack.findUnique({
+        where: { id: data.stackId },
+      });
+      if (!stack) {
+        client.emit('error', { message: 'Stack not found' });
+        return;
+      }
+      const child = this.stackService.getComposeChild(
+        stack.folderPath,
+        data.action,
+        data.action === 'up' ? ['-d'] : [],
+      );
       const room = `compose:${data.stackId}`;
       const key = `compose:${data.stackId}:${client.id}`;
       this.activeStreams.set(key, { process: child, clientId: client.id });
 
       child.stdout?.on('data', (d: Buffer) => {
-        client.emit('stack:compose-progress', { stackId: data.stackId, line: d.toString() });
+        client.emit('stack:compose-progress', {
+          stackId: data.stackId,
+          line: d.toString(),
+        });
       });
       child.stderr?.on('data', (d: Buffer) => {
-        client.emit('stack:compose-progress', { stackId: data.stackId, line: d.toString() });
+        client.emit('stack:compose-progress', {
+          stackId: data.stackId,
+          line: d.toString(),
+        });
       });
       child.on('close', (code) => {
         client.emit('stack:compose-end', { stackId: data.stackId, code });
@@ -164,7 +194,10 @@ export class StackGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const interval = setInterval(async () => {
       try {
         const stats = await this.containerService.stats(data.containerId);
-        client.emit('container:stats', { containerId: data.containerId, stats });
+        client.emit('container:stats', {
+          containerId: data.containerId,
+          stats,
+        });
       } catch {
         client.emit('container:stats:end', { containerId: data.containerId });
         clearInterval(interval);
@@ -181,16 +214,17 @@ export class StackGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { name: string },
   ) {
     try {
-      const Dockerode = require('dockerode');
-      const { getDockerClient } = require('../common/docker-client');
-      const docker = getDockerClient();
       const stream = await docker.pull(data.name);
-      docker.modem.followProgress(stream, (err: any) => {
-        if (err) client.emit('error', { message: err.message });
-        client.emit('image:pull-end', { name: data.name });
-      }, (event: any) => {
-        client.emit('image:pull-progress', { name: data.name, event });
-      });
+      (docker as any).followProgress(
+        stream,
+        (err: any) => {
+          if (err) client.emit('error', { message: err.message });
+          client.emit('image:pull-end', { name: data.name });
+        },
+        (event: any) => {
+          client.emit('image:pull-progress', { name: data.name, event });
+        },
+      );
     } catch (e: any) {
       client.emit('error', { message: e.message });
     }
@@ -199,13 +233,18 @@ export class StackGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('ollama:chat-stream')
   async handleOllamaChat(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { model: string; messages: { role: string; content: string }[] },
+    @MessageBody()
+    data: { model: string; messages: { role: string; content: string }[] },
   ) {
     try {
       const ollamaRes = await fetch('http://localhost:11434/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: data.model, messages: data.messages, stream: true }),
+        body: JSON.stringify({
+          model: data.model,
+          messages: data.messages,
+          stream: true,
+        }),
       });
       const reader = ollamaRes.body?.getReader();
       if (!reader) return;
@@ -218,7 +257,9 @@ export class StackGateway implements OnGatewayConnection, OnGatewayDisconnect {
         for (const line of lines) {
           try {
             const parsed = JSON.parse(line);
-            client.emit('ollama:chat-token', { token: parsed.message?.content ?? '' });
+            client.emit('ollama:chat-token', {
+              token: parsed.message?.content ?? '',
+            });
           } catch {}
         }
       }

@@ -65,7 +65,8 @@ services:
 volumes:
   pg-data:`,
     params: {
-      port: 5432, volumePath: 'pg-data',
+      port: 5432,
+      volumePath: 'pg-data',
       envVars: [
         { key: 'POSTGRES_USER', value: 'admin' },
         { key: 'POSTGRES_PASSWORD', value: 'changeme' },
@@ -92,7 +93,8 @@ services:
 volumes:
   mysql-data:`,
     params: {
-      port: 3306, volumePath: 'mysql-data',
+      port: 3306,
+      volumePath: 'mysql-data',
       envVars: [
         { key: 'MYSQL_ROOT_PASSWORD', value: 'changeme' },
         { key: 'MYSQL_DATABASE', value: 'appdb' },

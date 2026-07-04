@@ -4,7 +4,9 @@ import * as path from 'path';
 import * as os from 'os';
 import { PrismaService } from '../prisma/prisma.service';
 
-const STACKHAND_BACKUP_DIR = process.env.STACKHAND_BACKUP_DIR || path.join(os.homedir(), '.stackhand', 'backups');
+const STACKHAND_BACKUP_DIR =
+  process.env.STACKHAND_BACKUP_DIR ||
+  path.join(os.homedir(), '.stackhand', 'backups');
 
 @Injectable()
 export class BackupService {
@@ -17,7 +19,9 @@ export class BackupService {
   }
 
   async backupWorkspaceFiles(workspaceId: string) {
-    const ws = await this.prisma.workspace.findUnique({ where: { id: workspaceId } });
+    const ws = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+    });
     if (!ws) throw new BadRequestException('Workspace not found');
     if (!ws.rootFolderPath || !fs.existsSync(ws.rootFolderPath)) {
       throw new BadRequestException('Workspace root folder does not exist');
@@ -64,7 +68,9 @@ export class BackupService {
   }
 
   async listBackups(workspaceId: string) {
-    const ws = await this.prisma.workspace.findUnique({ where: { id: workspaceId } });
+    const ws = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+    });
     if (!ws) throw new BadRequestException('Workspace not found');
 
     const backupDir = path.join(STACKHAND_BACKUP_DIR, ws.name);
@@ -72,8 +78,8 @@ export class BackupService {
 
     const entries = fs.readdirSync(backupDir, { withFileTypes: true });
     const snapshots = entries
-      .filter(e => e.isDirectory() && e.name.startsWith('snapshot-'))
-      .map(e => {
+      .filter((e) => e.isDirectory() && e.name.startsWith('snapshot-'))
+      .map((e) => {
         const snapshotPath = path.join(backupDir, e.name);
         const stat = fs.statSync(snapshotPath);
         return {
@@ -84,13 +90,18 @@ export class BackupService {
           size: this.getDirSize(snapshotPath),
         };
       })
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
 
     return snapshots;
   }
 
   async restoreBackup(workspaceId: string, snapshotName: string) {
-    const ws = await this.prisma.workspace.findUnique({ where: { id: workspaceId } });
+    const ws = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+    });
     if (!ws) throw new BadRequestException('Workspace not found');
 
     const snapshotPath = path.join(STACKHAND_BACKUP_DIR, ws.name, snapshotName);
@@ -132,7 +143,9 @@ export class BackupService {
   }
 
   async deleteBackup(workspaceId: string, snapshotName: string) {
-    const ws = await this.prisma.workspace.findUnique({ where: { id: workspaceId } });
+    const ws = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+    });
     if (!ws) throw new BadRequestException('Workspace not found');
 
     const snapshotPath = path.join(STACKHAND_BACKUP_DIR, ws.name, snapshotName);

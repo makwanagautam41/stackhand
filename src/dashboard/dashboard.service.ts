@@ -18,7 +18,9 @@ export class DashboardService {
     const stoppedStacks = stacks.filter((s) => s.status === 'stopped').length;
     const errorStacks = stacks.filter((s) => s.status === 'error').length;
     const totalContainers = containers.length;
-    const runningContainers = containers.filter((c) => c.status === 'running').length;
+    const runningContainers = containers.filter(
+      (c) => c.status === 'running',
+    ).length;
 
     const diskUsage = await this.getDiskUsage(workspaces);
 
