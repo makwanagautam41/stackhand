@@ -42,7 +42,7 @@ import { useWorkspaces } from "@/lib/workspace-store";
 import { useTheme, type Theme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
-import { WORKSPACE_COLORS, WORKSPACE_ICONS, DEFAULT_MODELS } from "@/lib/mock-data";
+import { WORKSPACE_COLORS, WORKSPACE_ICONS, DEFAULT_MODELS } from "@/lib/constants";
 import { getWorkspaceIcon } from "@/lib/icon-map";
 
 export const Route = createFileRoute("/_app/settings")({

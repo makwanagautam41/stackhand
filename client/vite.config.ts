@@ -36,12 +36,21 @@ function getBackendOrigin() {
   if (explicit) return explicit.replace(/\/$/, "");
 
   const host = process.env.HOST || rootEnv.get("HOST") || "127.0.0.1";
-  const port = process.env.PORT || rootEnv.get("PORT") || "4000";
+  const port = process.env.PORT || rootEnv.get("PORT") || "7171";
   const normalizedHost = host === "0.0.0.0" ? "127.0.0.1" : host;
   return `http://${normalizedHost}:${port}`;
 }
 
+function getFrontendPort() {
+  const rootEnv = readRootEnv();
+  return parseInt(
+    process.env.FRONTEND_PORT || rootEnv.get("FRONTEND_PORT") || "8181",
+    10,
+  );
+}
+
 const backendOrigin = getBackendOrigin();
+const frontendPort = getFrontendPort();
 
 export default defineConfig({
   tanstackStart: {
@@ -49,6 +58,7 @@ export default defineConfig({
   },
   vite: {
     server: {
+      port: frontendPort,
       proxy: {
         "/api": { target: backendOrigin, changeOrigin: true },
         "/socket.io": { target: backendOrigin, ws: true, changeOrigin: true },

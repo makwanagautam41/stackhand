@@ -5,11 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
-const DEFAULT_ROOT = "/home/gautam-makwana/stackhand";
-
-// Native folder picker: uses <input webkitdirectory> and drag-drop.
-// Since this is a browser preview (no filesystem), we derive a plausible
-// absolute path from the selected folder name.
 export function FolderPicker({
   value,
   onChange,
@@ -19,7 +14,7 @@ export function FolderPicker({
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [manual, setManual] = useState(value || DEFAULT_ROOT);
+  const [manual, setManual] = useState(value || "");
 
   const commit = (path: string) => {
     setManual(path);
@@ -31,7 +26,7 @@ export function FolderPicker({
     const first = files[0] as File & { webkitRelativePath?: string };
     const rel = first.webkitRelativePath ?? "";
     const folderName = rel.split("/")[0] || first.name;
-    commit(`/home/user/${folderName}`);
+    commit(folderName);
   };
 
   const onDrop = (e: DragEvent<HTMLDivElement>) => {
@@ -46,14 +41,12 @@ export function FolderPicker({
         }
       ).webkitGetAsEntry?.();
       if (entry?.isDirectory) {
-        commit(`/home/user/${entry.name}`);
+        commit(entry.name);
         return;
       }
     }
     handleFiles(e.dataTransfer.files);
   };
-
-  const useDefault = () => commit(DEFAULT_ROOT);
 
   return (
     <div className="space-y-4">
@@ -125,7 +118,7 @@ export function FolderPicker({
               value={manual}
               onChange={(e) => setManual(e.target.value)}
               onBlur={() => commit(manual)}
-              placeholder="/home/gautam-makwana/stackhand"
+              placeholder="/path/to/workspace"
               className="h-9 rounded-md pl-8 font-mono text-sm"
             />
             {manual && (
@@ -139,9 +132,6 @@ export function FolderPicker({
               </button>
             )}
           </div>
-          <Button type="button" variant="outline" onClick={useDefault}>
-            Use default
-          </Button>
         </div>
       </div>
 
@@ -152,7 +142,7 @@ export function FolderPicker({
             <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
               Selected root
             </div>
-            <div className="truncate font-mono text-sm">{value || manual || DEFAULT_ROOT}</div>
+            <div className="truncate font-mono text-sm">{value || manual || "(not set)"}</div>
           </div>
         </div>
       </div>

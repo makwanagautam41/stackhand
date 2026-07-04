@@ -7,7 +7,6 @@ import {
   IconRobot,
   IconSettings,
   IconStack2,
-  IconTerminal2,
   IconGauge,
   IconBell,
   IconFileText,
@@ -76,8 +75,8 @@ export function AppSidebar() {
           to="/dashboard"
           className="flex items-center gap-2 px-1 py-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
         >
-          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-primary text-primary-foreground">
-            <IconTerminal2 className="h-4 w-4" stroke={2} />
+          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md">
+            <img src="/docker.svg" alt="Docker" className="h-8 w-8" />
           </div>
           <div className="flex min-w-0 flex-col leading-tight group-data-[collapsible=icon]:hidden">
             <span className="truncate font-mono text-sm font-semibold tracking-tight">

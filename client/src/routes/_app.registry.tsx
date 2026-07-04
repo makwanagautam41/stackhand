@@ -625,7 +625,7 @@ function RegistryPage() {
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {section.images.map((img) => {
                   const fullName = img.name;
-                  const fakeImg: RegistryImage = {
+                  const mappedImg: RegistryImage = {
                     name: fullName,
                     namespace: fullName.indexOf("/") >= 0 ? fullName.split("/")[0] : "library",
                     repository: fullName.indexOf("/") >= 0 ? fullName.split("/")[1] : fullName,
@@ -638,12 +638,12 @@ function RegistryPage() {
                   return (
                     <SearchCard
                       key={fullName}
-                      img={fakeImg}
+                      img={mappedImg}
                       isFav={isFav(fullName)}
                       onToggleFav={() => toggleFav(fullName)}
-                      onClick={() => openDetails(fakeImg)}
+                      onClick={() => openDetails(mappedImg)}
                       onPull={(tag) => startPull(fullName, tag)}
-                      onDetails={() => openDetails(fakeImg)}
+                      onDetails={() => openDetails(mappedImg)}
                     />
                   );
                 })}

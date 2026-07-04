@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { FolderPicker } from "@/components/folder-picker";
-import { WORKSPACE_COLORS, WORKSPACE_ICONS, DEFAULT_MODELS } from "@/lib/mock-data";
+import { WORKSPACE_COLORS, WORKSPACE_ICONS, DEFAULT_MODELS } from "@/lib/constants";
 import { getWorkspaceIcon } from "@/lib/icon-map";
 import { useWorkspaces } from "@/lib/workspace-store";
 import type { OllamaModel } from "@/lib/types";
@@ -38,7 +38,7 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
   const [description, setDescription] = useState("");
   const [color, setColor] = useState(WORKSPACE_COLORS[0]);
   const [icon, setIcon] = useState(WORKSPACE_ICONS[0]);
-  const [rootFolder, setRootFolder] = useState("/home/gautam-makwana/stackhand");
+  const [rootFolder, setRootFolder] = useState("");
   const [checking, setChecking] = useState(false);
   const [checked, setChecked] = useState(false);
   const [models, setModels] = useState<OllamaModel[]>(DEFAULT_MODELS.map((m) => ({ ...m })));
@@ -134,7 +134,7 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
                   await api.createWorkspace({
                     name: "sample-workspace",
                     description: "Sample workspace with starter content",
-                    rootFolderPath: "/home/gautam-makwana/stackhand",
+                    rootFolderPath: "",
                   });
                   await refresh();
                   toast.success("Sample workspace loaded", {

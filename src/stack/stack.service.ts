@@ -77,16 +77,7 @@ export class StackService {
     if (!ws.rootFolderPath)
       throw new BadRequestException('Workspace has no root folder path set');
 
-    // Auto-fix stale /home/user/ paths left from seed/onboarding defaults
     let rootFolderPath = ws.rootFolderPath;
-    if (rootFolderPath.startsWith('/home/user/')) {
-      const homeDir = require('os').homedir();
-      rootFolderPath = rootFolderPath.replace('/home/user/', `${homeDir}/`);
-      await this.prisma.workspace.update({
-        where: { id: ws.id },
-        data: { rootFolderPath },
-      });
-    }
 
     // Auto-create the workspace root directory if it doesn't exist yet
     if (!fs.existsSync(rootFolderPath)) {
