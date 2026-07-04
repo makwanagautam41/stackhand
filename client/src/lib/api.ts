@@ -470,4 +470,48 @@ export const api = {
       body: JSON.stringify(value),
     });
   },
+
+  // ---- Database ----
+  async dbListTables() {
+    return request<string[]>("/db/tables");
+  },
+
+  async dbGetTableSchema(table: string) {
+    return request<{ table: string; columns: { cid: number; name: string; type: string; notNull: boolean; default: string | null; primaryKey: boolean }[]; rowCount: number }>(`/db/${encodeURIComponent(table)}/schema`);
+  },
+
+  async dbGetRows(table: string, limit = 50, offset = 0) {
+    return request<Record<string, any>[]>(`/db/${encodeURIComponent(table)}/rows?limit=${limit}&offset=${offset}`);
+  },
+
+  async dbGetRow(table: string, id: string, pk = "id") {
+    return request<Record<string, any> | null>(`/db/${encodeURIComponent(table)}/rows/${encodeURIComponent(id)}?pk=${encodeURIComponent(pk)}`);
+  },
+
+  async dbCreateRow(table: string, data: Record<string, any>) {
+    return request<{ inserted: boolean; rowId: number }>(`/db/${encodeURIComponent(table)}/rows`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async dbUpdateRow(table: string, id: string, data: Record<string, any>, pk = "id") {
+    return request<{ updated: boolean }>(`/db/${encodeURIComponent(table)}/rows/${encodeURIComponent(id)}?pk=${encodeURIComponent(pk)}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async dbDeleteRow(table: string, id: string, pk = "id") {
+    return request<{ deleted: boolean }>(`/db/${encodeURIComponent(table)}/rows/${encodeURIComponent(id)}?pk=${encodeURIComponent(pk)}`, {
+      method: "DELETE",
+    });
+  },
+
+  async dbExecuteQuery(sql: string) {
+    return request<{ type: "select"; rows: Record<string, any>[] } | { type: "execute"; affected: number }>("/db/query", {
+      method: "POST",
+      body: JSON.stringify({ sql }),
+    });
+  },
 };

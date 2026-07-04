@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { load as yamlLoad } from "js-yaml";
 import {
   Edit,
   Layers,
@@ -92,7 +93,8 @@ export const Route = createFileRoute("/_app/stacks")({
 });
 
 function StacksPage() {
-  const { current, stacksByWs, updateStack, deleteStack, addStack, refreshStacks } = useWorkspaces();
+  const { current, stacksByWs, updateStack, deleteStack, addStack, refreshStacks } =
+    useWorkspaces();
   const [filter, setFilter] = useState<"all" | StackStatus>("all");
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState<Record<string, boolean>>({});
@@ -118,7 +120,9 @@ function StacksPage() {
       else if (action === "stop") await api.composeDown(stack.id);
       else await api.composeRestart(stack.id);
       await refreshStacks();
-      toast.success(`${stack.name} ${action === "start" ? "started" : action === "stop" ? "stopped" : "restarted"}`);
+      toast.success(
+        `${stack.name} ${action === "start" ? "started" : action === "stop" ? "stopped" : "restarted"}`,
+      );
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -197,9 +201,7 @@ function StacksPage() {
                       >
                         {s.name}
                       </Link>
-                      <div className="text-mono text-xs text-muted-foreground">
-                        {s.yamlPath}
-                      </div>
+                      <div className="text-mono text-xs text-muted-foreground">{s.yamlPath}</div>
                     </TableCell>
                     <TableCell>
                       <StatusBadge status={s.status} />
@@ -301,7 +303,9 @@ function StacksPage() {
             <SheetTitle>Logs · {logsFor?.name}</SheetTitle>
             <SheetDescription>Live stream from Docker</SheetDescription>
           </SheetHeader>
-          <div className="mt-4">{logsFor && <LogsViewer name={logsFor.name} stackId={logsFor.id} />}</div>
+          <div className="mt-4">
+            {logsFor && <LogsViewer name={logsFor.name} stackId={logsFor.id} />}
+          </div>
         </SheetContent>
       </Sheet>
 
@@ -341,7 +345,11 @@ function StacksPage() {
         onOpenChange={setNewOpen}
         onCreate={async (stack) => {
           try {
-            const created = await api.createStack(current.id, { name: stack.name, yaml: stack.yaml, folderName: stack.name.toLowerCase().replace(/[^a-z0-9-]/g, '-') });
+            const created = await api.createStack(current.id, {
+              name: stack.name,
+              yaml: stack.yaml,
+              folderName: stack.name.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
+            });
             addStack(current.id, { ...created, workspaceId: current.id });
             await refreshStacks();
             toast.success(`Stack ${stack.name} created`);
@@ -405,6 +413,93 @@ function buildYaml(opts: {
   return lines.join("\n") + "\n";
 }
 
+function parseYamlToForm(
+  value: string,
+  setter: {
+    setService: (v: string) => void;
+    setImage: (v: string) => void;
+    setName: (v: string) => void;
+    setRestart: (v: string) => void;
+    setCommand: (v: string) => void;
+    setPorts: (v: PortRow[]) => void;
+    setEnv: (v: EnvRow[]) => void;
+    setVolumes: (v: VolRow[]) => void;
+    setNetwork: (v: string) => void;
+  },
+) {
+  try {
+    const doc = yamlLoad(value);
+    if (!doc || typeof doc !== "object") return;
+    const services = (doc as any).services;
+    if (!services || typeof services !== "object") return;
+    const keys = Object.keys(services);
+    if (keys.length === 0) return;
+    const svc = services[keys[0]];
+    if (!svc || typeof svc !== "object") return;
+
+    setter.setService(keys[0]);
+    if (svc.image) setter.setImage(String(svc.image));
+    if (svc.container_name) setter.setName(String(svc.container_name));
+    if (svc.restart) setter.setRestart(String(svc.restart));
+    if (svc.command) {
+      setter.setCommand(
+        typeof svc.command === "string" ? svc.command : JSON.stringify(svc.command),
+      );
+    }
+
+    if (Array.isArray(svc.ports)) {
+      setter.setPorts(
+        svc.ports.map((p: any) => {
+          const pStr = typeof p === "string" ? p : "";
+          const match = pStr.match(/^(\d+):(\d+)(?:\/(tcp|udp))?$/);
+          if (match) {
+            return {
+              host: match[1],
+              container: match[2],
+              protocol: (match[3] || "tcp") as "tcp" | "udp",
+            };
+          }
+          return { host: "", container: "", protocol: "tcp" as const };
+        }),
+      );
+    }
+
+    if (svc.environment) {
+      if (Array.isArray(svc.environment)) {
+        setter.setEnv(
+          svc.environment.map((e: string) => {
+            const eqIdx = e.indexOf("=");
+            return eqIdx > 0
+              ? { key: e.slice(0, eqIdx), value: e.slice(eqIdx + 1) }
+              : { key: e, value: "" };
+          }),
+        );
+      } else if (typeof svc.environment === "object") {
+        setter.setEnv(
+          Object.entries(svc.environment).map(([k, v]) => ({
+            key: k,
+            value: String(v ?? ""),
+          })),
+        );
+      }
+    }
+
+    if (Array.isArray(svc.volumes)) {
+      setter.setVolumes(
+        svc.volumes.map((v: string) => {
+          const parts = v.split(":");
+          return { host: parts[0] || "", container: parts[1] || "" };
+        }),
+      );
+    }
+
+    if (svc.networks) {
+      const nets = Array.isArray(svc.networks) ? svc.networks : [svc.networks];
+      setter.setNetwork(nets[0] ? String(nets[0]) : "");
+    }
+  } catch {}
+}
+
 function NewStackDialog({
   open,
   onOpenChange,
@@ -442,7 +537,10 @@ function NewStackDialog({
       setCommand("");
       return;
     }
-    const defaults: Record<string, { service: string; image: string; ports: PortRow[]; env: EnvRow[]; volumes: VolRow[] }> = {
+    const defaults: Record<
+      string,
+      { service: string; image: string; ports: PortRow[]; env: EnvRow[]; volumes: VolRow[] }
+    > = {
       nginx: {
         service: "nginx",
         image: "nginx:alpine",
@@ -574,23 +672,47 @@ function NewStackDialog({
 
             <Tabs defaultValue="basics">
               <TabsList className="w-full">
-                <TabsTrigger value="basics" className="flex-1">Basics</TabsTrigger>
-                <TabsTrigger value="ports" className="flex-1">Ports</TabsTrigger>
-                <TabsTrigger value="env" className="flex-1">Env</TabsTrigger>
-                <TabsTrigger value="volumes" className="flex-1">Volumes</TabsTrigger>
-                <TabsTrigger value="advanced" className="flex-1">Advanced</TabsTrigger>
+                <TabsTrigger value="basics" className="flex-1">
+                  Basics
+                </TabsTrigger>
+                <TabsTrigger value="ports" className="flex-1">
+                  Ports
+                </TabsTrigger>
+                <TabsTrigger value="env" className="flex-1">
+                  Env
+                </TabsTrigger>
+                <TabsTrigger value="volumes" className="flex-1">
+                  Volumes
+                </TabsTrigger>
+                <TabsTrigger value="advanced" className="flex-1">
+                  Advanced
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="basics" className="space-y-2 pt-3">
                 <div className="grid gap-2 sm:grid-cols-2">
                   <div>
                     <label className="mb-1 block text-xs font-medium">Service</label>
-                    <Input value={service} onChange={(e) => { setYamlOverride(null); setService(e.target.value); }} />
+                    <Input
+                      value={service}
+                      onChange={(e) => {
+                        setYamlOverride(null);
+                        setService(e.target.value);
+                      }}
+                    />
                   </div>
                   <div>
                     <label className="mb-1 block text-xs font-medium">Restart</label>
-                    <Select value={restart} onValueChange={(v) => { setYamlOverride(null); setRestart(v); }}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                    <Select
+                      value={restart}
+                      onValueChange={(v) => {
+                        setYamlOverride(null);
+                        setRestart(v);
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="no">no</SelectItem>
                         <SelectItem value="always">always</SelectItem>
@@ -604,7 +726,10 @@ function NewStackDialog({
                   <label className="mb-1 block text-xs font-medium">Image</label>
                   <Input
                     value={image}
-                    onChange={(e) => { setYamlOverride(null); setImage(e.target.value); }}
+                    onChange={(e) => {
+                      setYamlOverride(null);
+                      setImage(e.target.value);
+                    }}
                     placeholder="nginx:alpine"
                     className="text-mono"
                   />
@@ -613,7 +738,10 @@ function NewStackDialog({
                   <label className="mb-1 block text-xs font-medium">Command (optional)</label>
                   <Input
                     value={command}
-                    onChange={(e) => { setYamlOverride(null); setCommand(e.target.value); }}
+                    onChange={(e) => {
+                      setYamlOverride(null);
+                      setCommand(e.target.value);
+                    }}
                     placeholder='e.g. ["nginx","-g","daemon off;"]'
                     className="text-mono"
                   />
@@ -621,89 +749,177 @@ function NewStackDialog({
               </TabsContent>
 
               <TabsContent value="ports" className="space-y-2 pt-3">
-                {ports.length === 0 && <p className="text-xs text-muted-foreground">No ports mapped.</p>}
+                {ports.length === 0 && (
+                  <p className="text-xs text-muted-foreground">No ports mapped.</p>
+                )}
                 {ports.map((p, i) => (
                   <div key={i} className="flex items-center gap-2">
                     <Input
                       value={p.host}
-                      onChange={(e) => { setYamlOverride(null); setPorts((rs) => rs.map((r, j) => j === i ? { ...r, host: e.target.value } : r)); }}
+                      onChange={(e) => {
+                        setYamlOverride(null);
+                        setPorts((rs) =>
+                          rs.map((r, j) => (j === i ? { ...r, host: e.target.value } : r)),
+                        );
+                      }}
                       placeholder="host"
                       className="text-mono"
                     />
                     <span className="text-muted-foreground">:</span>
                     <Input
                       value={p.container}
-                      onChange={(e) => { setYamlOverride(null); setPorts((rs) => rs.map((r, j) => j === i ? { ...r, container: e.target.value } : r)); }}
+                      onChange={(e) => {
+                        setYamlOverride(null);
+                        setPorts((rs) =>
+                          rs.map((r, j) => (j === i ? { ...r, container: e.target.value } : r)),
+                        );
+                      }}
                       placeholder="container"
                       className="text-mono"
                     />
-                    <Select value={p.protocol} onValueChange={(v) => { setYamlOverride(null); setPorts((rs) => rs.map((r, j) => j === i ? { ...r, protocol: v as "tcp" | "udp" } : r)); }}>
-                      <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+                    <Select
+                      value={p.protocol}
+                      onValueChange={(v) => {
+                        setYamlOverride(null);
+                        setPorts((rs) =>
+                          rs.map((r, j) => (j === i ? { ...r, protocol: v as "tcp" | "udp" } : r)),
+                        );
+                      }}
+                    >
+                      <SelectTrigger className="w-24">
+                        <SelectValue />
+                      </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="tcp">tcp</SelectItem>
                         <SelectItem value="udp">udp</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Button size="icon" variant="ghost" onClick={() => { setYamlOverride(null); setPorts((rs) => rs.filter((_, j) => j !== i)); }}>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => {
+                        setYamlOverride(null);
+                        setPorts((rs) => rs.filter((_, j) => j !== i));
+                      }}
+                    >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 ))}
-                <Button size="sm" variant="outline" onClick={() => { setYamlOverride(null); setPorts((rs) => [...rs, { host: "", container: "", protocol: "tcp" }]); }}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setYamlOverride(null);
+                    setPorts((rs) => [...rs, { host: "", container: "", protocol: "tcp" }]);
+                  }}
+                >
                   <Plus className="mr-1 h-3.5 w-3.5" /> Add port
                 </Button>
               </TabsContent>
 
               <TabsContent value="env" className="space-y-2 pt-3">
-                {env.length === 0 && <p className="text-xs text-muted-foreground">No environment variables.</p>}
+                {env.length === 0 && (
+                  <p className="text-xs text-muted-foreground">No environment variables.</p>
+                )}
                 {env.map((e, i) => (
                   <div key={i} className="flex items-center gap-2">
                     <Input
                       value={e.key}
-                      onChange={(ev) => { setYamlOverride(null); setEnv((rs) => rs.map((r, j) => j === i ? { ...r, key: ev.target.value } : r)); }}
+                      onChange={(ev) => {
+                        setYamlOverride(null);
+                        setEnv((rs) =>
+                          rs.map((r, j) => (j === i ? { ...r, key: ev.target.value } : r)),
+                        );
+                      }}
                       placeholder="KEY"
                       className="text-mono"
                     />
                     <span className="text-muted-foreground">=</span>
                     <Input
                       value={e.value}
-                      onChange={(ev) => { setYamlOverride(null); setEnv((rs) => rs.map((r, j) => j === i ? { ...r, value: ev.target.value } : r)); }}
+                      onChange={(ev) => {
+                        setYamlOverride(null);
+                        setEnv((rs) =>
+                          rs.map((r, j) => (j === i ? { ...r, value: ev.target.value } : r)),
+                        );
+                      }}
                       placeholder="value"
                       className="text-mono"
                     />
-                    <Button size="icon" variant="ghost" onClick={() => { setYamlOverride(null); setEnv((rs) => rs.filter((_, j) => j !== i)); }}>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => {
+                        setYamlOverride(null);
+                        setEnv((rs) => rs.filter((_, j) => j !== i));
+                      }}
+                    >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 ))}
-                <Button size="sm" variant="outline" onClick={() => { setYamlOverride(null); setEnv((rs) => [...rs, { key: "", value: "" }]); }}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setYamlOverride(null);
+                    setEnv((rs) => [...rs, { key: "", value: "" }]);
+                  }}
+                >
                   <Plus className="mr-1 h-3.5 w-3.5" /> Add variable
                 </Button>
               </TabsContent>
 
               <TabsContent value="volumes" className="space-y-2 pt-3">
-                {volumes.length === 0 && <p className="text-xs text-muted-foreground">No volumes mounted.</p>}
+                {volumes.length === 0 && (
+                  <p className="text-xs text-muted-foreground">No volumes mounted.</p>
+                )}
                 {volumes.map((v, i) => (
                   <div key={i} className="flex items-center gap-2">
                     <Input
                       value={v.host}
-                      onChange={(e) => { setYamlOverride(null); setVolumes((rs) => rs.map((r, j) => j === i ? { ...r, host: e.target.value } : r)); }}
+                      onChange={(e) => {
+                        setYamlOverride(null);
+                        setVolumes((rs) =>
+                          rs.map((r, j) => (j === i ? { ...r, host: e.target.value } : r)),
+                        );
+                      }}
                       placeholder="host/named"
                       className="text-mono"
                     />
                     <span className="text-muted-foreground">:</span>
                     <Input
                       value={v.container}
-                      onChange={(e) => { setYamlOverride(null); setVolumes((rs) => rs.map((r, j) => j === i ? { ...r, container: e.target.value } : r)); }}
+                      onChange={(e) => {
+                        setYamlOverride(null);
+                        setVolumes((rs) =>
+                          rs.map((r, j) => (j === i ? { ...r, container: e.target.value } : r)),
+                        );
+                      }}
                       placeholder="/in/container"
                       className="text-mono"
                     />
-                    <Button size="icon" variant="ghost" onClick={() => { setYamlOverride(null); setVolumes((rs) => rs.filter((_, j) => j !== i)); }}>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => {
+                        setYamlOverride(null);
+                        setVolumes((rs) => rs.filter((_, j) => j !== i));
+                      }}
+                    >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 ))}
-                <Button size="sm" variant="outline" onClick={() => { setYamlOverride(null); setVolumes((rs) => [...rs, { host: "", container: "" }]); }}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setYamlOverride(null);
+                    setVolumes((rs) => [...rs, { host: "", container: "" }]);
+                  }}
+                >
                   <Plus className="mr-1 h-3.5 w-3.5" /> Add volume
                 </Button>
               </TabsContent>
@@ -713,7 +929,10 @@ function NewStackDialog({
                   <label className="mb-1 block text-xs font-medium">Network name (optional)</label>
                   <Input
                     value={network}
-                    onChange={(e) => { setYamlOverride(null); setNetwork(e.target.value); }}
+                    onChange={(e) => {
+                      setYamlOverride(null);
+                      setNetwork(e.target.value);
+                    }}
                     placeholder="app-net"
                     className="text-mono"
                   />
@@ -729,7 +948,12 @@ function NewStackDialog({
           <div className="flex flex-col">
             <div className="mb-1 flex items-center justify-between">
               <div className="text-xs font-medium">
-                YAML {yamlOverride !== null && <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">edited</Badge>}
+                YAML{" "}
+                {yamlOverride !== null && (
+                  <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
+                    edited
+                  </Badge>
+                )}
               </div>
               {yamlOverride !== null && (
                 <Button size="sm" variant="ghost" onClick={() => setYamlOverride(null)}>
@@ -739,7 +963,21 @@ function NewStackDialog({
             </div>
             <textarea
               value={yaml}
-              onChange={(e) => setYamlOverride(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setYamlOverride(v);
+                parseYamlToForm(v, {
+                  setService,
+                  setImage,
+                  setName,
+                  setRestart,
+                  setCommand,
+                  setPorts,
+                  setEnv,
+                  setVolumes,
+                  setNetwork,
+                });
+              }}
               spellCheck={false}
               className="scrollbar-thin h-[420px] w-full flex-1 resize-none rounded-md border bg-muted/30 p-3 font-mono text-xs outline-none focus:ring-1 focus:ring-ring"
             />
@@ -798,4 +1036,3 @@ function NewStackDialog({
     </Dialog>
   );
 }
-

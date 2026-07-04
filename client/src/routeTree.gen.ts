@@ -11,16 +11,15 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
+import { Route as DatabaseRouteImport } from './routes/database'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppYamlRouteImport } from './routes/_app.yaml'
 import { Route as AppVolumesRouteImport } from './routes/_app.volumes'
-import { Route as AppTemplatesRouteImport } from './routes/_app.templates'
 import { Route as AppStacksRouteImport } from './routes/_app.stacks'
 import { Route as AppSetupRouteImport } from './routes/_app.setup'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppRegistryRouteImport } from './routes/_app.registry'
-import { Route as AppNetworkRouteImport } from './routes/_app.network'
 import { Route as AppMetricsRouteImport } from './routes/_app.metrics'
 import { Route as AppImagesRouteImport } from './routes/_app.images'
 import { Route as AppEnvRouteImport } from './routes/_app.env'
@@ -38,6 +37,11 @@ const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
 const OnboardingRoute = OnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DatabaseRoute = DatabaseRouteImport.update({
+  id: '/database',
+  path: '/database',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppRoute = AppRouteImport.update({
@@ -59,11 +63,6 @@ const AppVolumesRoute = AppVolumesRouteImport.update({
   path: '/volumes',
   getParentRoute: () => AppRoute,
 } as any)
-const AppTemplatesRoute = AppTemplatesRouteImport.update({
-  id: '/templates',
-  path: '/templates',
-  getParentRoute: () => AppRoute,
-} as any)
 const AppStacksRoute = AppStacksRouteImport.update({
   id: '/stacks',
   path: '/stacks',
@@ -82,11 +81,6 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
 const AppRegistryRoute = AppRegistryRouteImport.update({
   id: '/registry',
   path: '/registry',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppNetworkRoute = AppNetworkRouteImport.update({
-  id: '/network',
-  path: '/network',
   getParentRoute: () => AppRoute,
 } as any)
 const AppMetricsRoute = AppMetricsRouteImport.update({
@@ -132,6 +126,7 @@ const AppStacksStackIdRoute = AppStacksStackIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/database': typeof DatabaseRoute
   '/onboarding': typeof OnboardingRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/ai': typeof AppAiRoute
@@ -141,18 +136,17 @@ export interface FileRoutesByFullPath {
   '/env': typeof AppEnvRoute
   '/images': typeof AppImagesRoute
   '/metrics': typeof AppMetricsRoute
-  '/network': typeof AppNetworkRoute
   '/registry': typeof AppRegistryRoute
   '/settings': typeof AppSettingsRoute
   '/setup': typeof AppSetupRoute
   '/stacks': typeof AppStacksRouteWithChildren
-  '/templates': typeof AppTemplatesRoute
   '/volumes': typeof AppVolumesRoute
   '/yaml': typeof AppYamlRoute
   '/stacks/$stackId': typeof AppStacksStackIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/database': typeof DatabaseRoute
   '/onboarding': typeof OnboardingRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/ai': typeof AppAiRoute
@@ -162,12 +156,10 @@ export interface FileRoutesByTo {
   '/env': typeof AppEnvRoute
   '/images': typeof AppImagesRoute
   '/metrics': typeof AppMetricsRoute
-  '/network': typeof AppNetworkRoute
   '/registry': typeof AppRegistryRoute
   '/settings': typeof AppSettingsRoute
   '/setup': typeof AppSetupRoute
   '/stacks': typeof AppStacksRouteWithChildren
-  '/templates': typeof AppTemplatesRoute
   '/volumes': typeof AppVolumesRoute
   '/yaml': typeof AppYamlRoute
   '/stacks/$stackId': typeof AppStacksStackIdRoute
@@ -176,6 +168,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
+  '/database': typeof DatabaseRoute
   '/onboarding': typeof OnboardingRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/_app/ai': typeof AppAiRoute
@@ -185,12 +178,10 @@ export interface FileRoutesById {
   '/_app/env': typeof AppEnvRoute
   '/_app/images': typeof AppImagesRoute
   '/_app/metrics': typeof AppMetricsRoute
-  '/_app/network': typeof AppNetworkRoute
   '/_app/registry': typeof AppRegistryRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/setup': typeof AppSetupRoute
   '/_app/stacks': typeof AppStacksRouteWithChildren
-  '/_app/templates': typeof AppTemplatesRoute
   '/_app/volumes': typeof AppVolumesRoute
   '/_app/yaml': typeof AppYamlRoute
   '/_app/stacks/$stackId': typeof AppStacksStackIdRoute
@@ -199,6 +190,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/database'
     | '/onboarding'
     | '/sitemap.xml'
     | '/ai'
@@ -208,18 +200,17 @@ export interface FileRouteTypes {
     | '/env'
     | '/images'
     | '/metrics'
-    | '/network'
     | '/registry'
     | '/settings'
     | '/setup'
     | '/stacks'
-    | '/templates'
     | '/volumes'
     | '/yaml'
     | '/stacks/$stackId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/database'
     | '/onboarding'
     | '/sitemap.xml'
     | '/ai'
@@ -229,12 +220,10 @@ export interface FileRouteTypes {
     | '/env'
     | '/images'
     | '/metrics'
-    | '/network'
     | '/registry'
     | '/settings'
     | '/setup'
     | '/stacks'
-    | '/templates'
     | '/volumes'
     | '/yaml'
     | '/stacks/$stackId'
@@ -242,6 +231,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_app'
+    | '/database'
     | '/onboarding'
     | '/sitemap.xml'
     | '/_app/ai'
@@ -251,12 +241,10 @@ export interface FileRouteTypes {
     | '/_app/env'
     | '/_app/images'
     | '/_app/metrics'
-    | '/_app/network'
     | '/_app/registry'
     | '/_app/settings'
     | '/_app/setup'
     | '/_app/stacks'
-    | '/_app/templates'
     | '/_app/volumes'
     | '/_app/yaml'
     | '/_app/stacks/$stackId'
@@ -265,6 +253,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
+  DatabaseRoute: typeof DatabaseRoute
   OnboardingRoute: typeof OnboardingRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
 }
@@ -283,6 +272,13 @@ declare module '@tanstack/react-router' {
       path: '/onboarding'
       fullPath: '/onboarding'
       preLoaderRoute: typeof OnboardingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/database': {
+      id: '/database'
+      path: '/database'
+      fullPath: '/database'
+      preLoaderRoute: typeof DatabaseRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app': {
@@ -313,13 +309,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppVolumesRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/templates': {
-      id: '/_app/templates'
-      path: '/templates'
-      fullPath: '/templates'
-      preLoaderRoute: typeof AppTemplatesRouteImport
-      parentRoute: typeof AppRoute
-    }
     '/_app/stacks': {
       id: '/_app/stacks'
       path: '/stacks'
@@ -346,13 +335,6 @@ declare module '@tanstack/react-router' {
       path: '/registry'
       fullPath: '/registry'
       preLoaderRoute: typeof AppRegistryRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/network': {
-      id: '/_app/network'
-      path: '/network'
-      fullPath: '/network'
-      preLoaderRoute: typeof AppNetworkRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/metrics': {
@@ -434,12 +416,10 @@ interface AppRouteChildren {
   AppEnvRoute: typeof AppEnvRoute
   AppImagesRoute: typeof AppImagesRoute
   AppMetricsRoute: typeof AppMetricsRoute
-  AppNetworkRoute: typeof AppNetworkRoute
   AppRegistryRoute: typeof AppRegistryRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppSetupRoute: typeof AppSetupRoute
   AppStacksRoute: typeof AppStacksRouteWithChildren
-  AppTemplatesRoute: typeof AppTemplatesRoute
   AppVolumesRoute: typeof AppVolumesRoute
   AppYamlRoute: typeof AppYamlRoute
 }
@@ -452,12 +432,10 @@ const AppRouteChildren: AppRouteChildren = {
   AppEnvRoute: AppEnvRoute,
   AppImagesRoute: AppImagesRoute,
   AppMetricsRoute: AppMetricsRoute,
-  AppNetworkRoute: AppNetworkRoute,
   AppRegistryRoute: AppRegistryRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppSetupRoute: AppSetupRoute,
   AppStacksRoute: AppStacksRouteWithChildren,
-  AppTemplatesRoute: AppTemplatesRoute,
   AppVolumesRoute: AppVolumesRoute,
   AppYamlRoute: AppYamlRoute,
 }
@@ -467,6 +445,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
+  DatabaseRoute: DatabaseRoute,
   OnboardingRoute: OnboardingRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
 }

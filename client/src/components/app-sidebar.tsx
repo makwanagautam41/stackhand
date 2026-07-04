@@ -8,12 +8,10 @@ import {
   IconSettings,
   IconStack2,
   IconTerminal2,
-  IconTemplate,
   IconGauge,
   IconBell,
   IconFileText,
   IconCloudDownload,
-  IconNetwork,
   IconPhoto,
   IconDeviceDesktopAnalytics,
 } from "@tabler/icons-react";
@@ -47,9 +45,7 @@ const GROUPS = [
       { title: "Containers", to: "/containers", icon: IconBrandDocker },
       { title: "Images", to: "/images", icon: IconPhoto },
       { title: "Volumes", to: "/volumes", icon: IconDatabase },
-      { title: "Templates", to: "/templates", icon: IconTemplate },
       { title: "Registry", to: "/registry", icon: IconCloudDownload },
-      { title: "Network", to: "/network", icon: IconNetwork },
     ],
   },
   {
@@ -64,6 +60,7 @@ const GROUPS = [
     items: [
       { title: "AI Assistant", to: "/ai", icon: IconRobot },
       { title: "Setup", to: "/setup", icon: IconDeviceDesktopAnalytics },
+      { title: "Database", to: "/database", icon: IconDatabase },
       { title: "Settings", to: "/settings", icon: IconSettings },
     ],
   },
@@ -126,11 +123,7 @@ export function AppSidebar() {
           </SidebarGroup>
         ))}
       </SidebarContent>
-      {/* <SidebarFooter className="border-t p-3">
-        <p className="font-mono text-[10px] text-muted-foreground group-data-[collapsible=icon]:hidden">
-          v0.1.0 · stackhand
-        </p>
-      </SidebarFooter> */}
+      <SidebarFooter className="border-t p-3.5"></SidebarFooter>
     </Sidebar>
   );
 }

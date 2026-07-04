@@ -20,10 +20,8 @@ import {
   Image as ImageIcon,
   LayoutDashboard,
   Layers,
-  Network,
   Plus,
   Settings,
-  LayoutTemplate,
   Container as ContainerIcon,
 } from "lucide-react";
 import { useWorkspaces } from "@/lib/workspace-store";
@@ -38,7 +36,7 @@ export function CommandPalette({
 }) {
   const navigate = useNavigate();
   const { workspaces, current, setCurrent, stacksByWs } = useWorkspaces();
-  const stacks = current ? stacksByWs[current.id] ?? [] : [];
+  const stacks = current ? (stacksByWs[current.id] ?? []) : [];
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -83,14 +81,8 @@ export function CommandPalette({
           <CommandItem onSelect={() => go(() => navigate({ to: "/volumes" }))}>
             <Database className="mr-2 h-4 w-4" /> Volumes
           </CommandItem>
-          <CommandItem onSelect={() => go(() => navigate({ to: "/templates" }))}>
-            <LayoutTemplate className="mr-2 h-4 w-4" /> Templates
-          </CommandItem>
           <CommandItem onSelect={() => go(() => navigate({ to: "/registry" }))}>
             <Download className="mr-2 h-4 w-4" /> Registry
-          </CommandItem>
-          <CommandItem onSelect={() => go(() => navigate({ to: "/network" }))}>
-            <Network className="mr-2 h-4 w-4" /> Network topology
           </CommandItem>
           <CommandItem onSelect={() => go(() => navigate({ to: "/yaml" }))}>
             <FolderTree className="mr-2 h-4 w-4" /> YAML Explorer
