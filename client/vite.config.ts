@@ -36,7 +36,7 @@ function getBackendOrigin() {
   if (explicit) return explicit.replace(/\/$/, "");
 
   const host = process.env.HOST || rootEnv.get("HOST") || "127.0.0.1";
-  const port = process.env.PORT || rootEnv.get("PORT") || "7171";
+  const port = process.env.PORT || rootEnv.get("PORT") || "22443";
   const normalizedHost = host === "0.0.0.0" ? "127.0.0.1" : host;
   return `http://${normalizedHost}:${port}`;
 }
@@ -44,7 +44,7 @@ function getBackendOrigin() {
 function getFrontendPort() {
   const rootEnv = readRootEnv();
   return parseInt(
-    process.env.FRONTEND_PORT || rootEnv.get("FRONTEND_PORT") || "8181",
+    process.env.FRONTEND_PORT || rootEnv.get("FRONTEND_PORT") || "22080",
     10,
   );
 }

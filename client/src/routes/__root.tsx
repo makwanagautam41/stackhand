@@ -134,27 +134,16 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
           >
             Go home
           </a>
-          {!loading && (
-            <>
-              <a
-                href="/database"
-                className="inline-flex items-center justify-center rounded-md border border-primary/30 bg-background px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
-              >
-                <svg className="h-4 w-4 mr-1.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
-                Browse database
-              </a>
-              {workspaces.length > 1 && (
-                <button
-                  onClick={() => {
-                    localStorage.removeItem(STORAGE_KEY);
-                    window.location.href = "/onboarding";
-                  }}
-                  className="inline-flex items-center justify-center rounded-md border border-destructive/50 bg-background px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
-                >
-                  Reset workspace state
-                </button>
-              )}
-            </>
+          {!loading && workspaces.length > 1 && (
+            <button
+              onClick={() => {
+                localStorage.removeItem(STORAGE_KEY);
+                window.location.href = "/onboarding";
+              }}
+              className="inline-flex items-center justify-center rounded-md border border-destructive/50 bg-background px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
+            >
+              Reset workspace state
+            </button>
           )}
         </div>
       </div>

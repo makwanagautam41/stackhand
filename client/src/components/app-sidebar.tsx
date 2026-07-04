@@ -59,7 +59,6 @@ const GROUPS = [
     items: [
       { title: "AI Assistant", to: "/ai", icon: IconRobot },
       { title: "Setup", to: "/setup", icon: IconDeviceDesktopAnalytics },
-      { title: "Database", to: "/database", icon: IconDatabase },
       { title: "Settings", to: "/settings", icon: IconSettings },
     ],
   },

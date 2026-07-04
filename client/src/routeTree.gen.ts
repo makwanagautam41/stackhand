@@ -11,7 +11,6 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
-import { Route as DatabaseRouteImport } from './routes/database'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppYamlRouteImport } from './routes/_app.yaml'
@@ -37,11 +36,6 @@ const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
 const OnboardingRoute = OnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DatabaseRoute = DatabaseRouteImport.update({
-  id: '/database',
-  path: '/database',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppRoute = AppRouteImport.update({
@@ -126,7 +120,6 @@ const AppStacksStackIdRoute = AppStacksStackIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/database': typeof DatabaseRoute
   '/onboarding': typeof OnboardingRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/ai': typeof AppAiRoute
@@ -146,7 +139,6 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/database': typeof DatabaseRoute
   '/onboarding': typeof OnboardingRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/ai': typeof AppAiRoute
@@ -168,7 +160,6 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
-  '/database': typeof DatabaseRoute
   '/onboarding': typeof OnboardingRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/_app/ai': typeof AppAiRoute
@@ -190,7 +181,6 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/database'
     | '/onboarding'
     | '/sitemap.xml'
     | '/ai'
@@ -210,7 +200,6 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/database'
     | '/onboarding'
     | '/sitemap.xml'
     | '/ai'
@@ -231,7 +220,6 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_app'
-    | '/database'
     | '/onboarding'
     | '/sitemap.xml'
     | '/_app/ai'
@@ -253,7 +241,6 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
-  DatabaseRoute: typeof DatabaseRoute
   OnboardingRoute: typeof OnboardingRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
 }
@@ -272,13 +259,6 @@ declare module '@tanstack/react-router' {
       path: '/onboarding'
       fullPath: '/onboarding'
       preLoaderRoute: typeof OnboardingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/database': {
-      id: '/database'
-      path: '/database'
-      fullPath: '/database'
-      preLoaderRoute: typeof DatabaseRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app': {
@@ -445,7 +425,6 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
-  DatabaseRoute: DatabaseRoute,
   OnboardingRoute: OnboardingRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
 }
