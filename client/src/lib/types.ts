@@ -1,5 +1,5 @@
-export type ContainerStatus = "running" | "stopped" | "error";
-export type StackStatus = "running" | "stopped" | "error" | "partial";
+export type ContainerStatus = "running" | "stopped" | "error" | "unknown";
+export type StackStatus = "running" | "stopped" | "error" | "partial" | "unknown";
 export type Density = "comfortable" | "compact";
 
 export interface OllamaModel {

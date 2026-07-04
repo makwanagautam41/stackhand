@@ -29,8 +29,13 @@ export function StatusBadge({
       dot: "bg-amber-500",
       bg: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
     },
+    unknown: {
+      label: "Unknown",
+      dot: "bg-slate-400",
+      bg: "bg-slate-500/10 text-slate-600 dark:text-slate-300 border-slate-500/20",
+    },
   };
-  const c = config[status];
+  const c = config[status] ?? config.unknown;
   return (
     <span
       className={cn(
