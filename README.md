@@ -15,70 +15,63 @@ The frontend dev server proxies `/api` and `/socket.io` to the NestJS backend.
 
 ---
 
-## System-Wide Installation
+## Usage (Shell Function)
 
-Install stackhand as a system command so you can run it from anywhere.
-
-### Install
+Add the following to your shell config (`~/.zshrc`, `~/.bashrc`, or `~/.config/shell/common.sh`):
 
 ```bash
-sudo bash scripts/install.sh
+STACKHAND_DIR="$HOME/Workspace/stackhand"
+SH_PID="$STACKHAND_DIR/stackhand.pid"
+SH_LOG="$STACKHAND_DIR/stackhand.log"
+
+stackhand() {
+  case "${1:-start}" in
+    start)
+      cd "$STACKHAND_DIR" || return 1
+      [ ! -f dist/src/main.js ] && npm run build
+      nohup node dist/src/main.js >> "$SH_LOG" 2>&1 &
+      echo $! > "$SH_PID"
+      echo "Stackhand started (PID: $(cat "$SH_PID")) — http://localhost:22443"
+      ;;
+    stop)
+      [ -f "$SH_PID" ] && kill "$(cat "$SH_PID")" 2>/dev/null && rm -f "$SH_PID" && echo "Stopped" || echo "Not running"
+      ;;
+    restart)
+      stackhand stop; sleep 1; stackhand start
+      ;;
+    build)
+      cd "$STACKHAND_DIR" && npm run build
+      ;;
+    logs)
+      [ -f "$SH_LOG" ] && tail -f "$SH_LOG" || echo "No logs yet"
+      ;;
+    *)
+      echo "Usage: stackhand {start|stop|restart|build|logs}"
+      ;;
+  esac
+}
 ```
 
-This will:
-
-| Step | What happens |
-|---|---|
-| 1 | Symlink `~/.local/share/stackhand/src/` → your dev repo |
-| 2 | Generate a random `STACKHAND_API_TOKEN` |
-| 3 | Write `.env` to the repo with absolute `DATABASE_URL` |
-| 4 | Install all npm dependencies |
-| 5 | Generate Prisma client & run DB migrations |
-| 6 | Build backend + frontend for production |
-| 7 | Install `stackhand` command to `/usr/local/bin/` |
-
-### Usage
+Then reload your shell and use:
 
 ```bash
-stackhand start       # Start the server (http://localhost:22443)
-stackhand status      # Check if running
-stackhand stop        # Stop the server
+stackhand start       # Build (if needed) + start server
+stackhand stop        # Stop server
 stackhand restart     # Restart
+stackhand build       # Rebuild only
 stackhand logs        # Tail live logs
-stackhand install     # Reinstall deps + rebuild + restart
-stackhand update      # Rebuild + restart (same as install)
-stackhand env         # Show current environment variables
 ```
 
-### File Locations
+### Data Directory
 
-| Path | Purpose |
-|---|---|
-| `~/.local/share/stackhand/src/` | Symlink → your development repo |
-| `~/.local/share/stackhand/workspaces-data/` | SQLite database (persistent) |
-| `~/.local/share/stackhand/workspaces/` | Default workspace root (your stack files) |
-| `~/.config/stackhand/env` | Config reference |
-| `/usr/local/bin/stackhand` | CLI command |
-
-### How Updates Work
-
-Since `install.sh` creates a **symlink** (not a copy), your dev repo IS the installed source:
-
-1. Make changes in this directory (e.g. `git pull`, edit code)
-2. Run `stackhand install` — reinstalls deps, runs migrations, rebuilds
-3. Run `stackhand restart` — restarts the server
-
-Or in one step: `stackhand update` — rebuild + restart (no git pull needed).
-
-Your database at `~/.local/share/stackhand/workspaces-data/stackhand.db` is never touched by updates.
+Persistent data (SQLite database, workspaces) lives at `~/.local/share/stackhand/`. Configure via `.env` in the repo root.
 
 ### Uninstall
 
 ```bash
-sudo rm /usr/local/bin/stackhand
 rm -rf ~/.local/share/stackhand ~/.config/stackhand
-# Remove the symlink'd .env from the repo if desired:
-# git checkout -- .env
+# Remove the function from your shell config
+# Optionally remove .env: git checkout -- .env
 ```
 
 ---
