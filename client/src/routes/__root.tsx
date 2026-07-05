@@ -193,7 +193,7 @@ function RootShell({ children }: { children: ReactNode }) {
       <head>
         <HeadContent />
       </head>
-      <body>
+      <body onContextMenu={(e) => e.preventDefault()}>
         {children}
         <Scripts />
       </body>

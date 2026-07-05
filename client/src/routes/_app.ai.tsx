@@ -5,16 +5,17 @@ import ReactMarkdown from "react-markdown";
 import {
   IconRobot,
   IconLoader2,
-  IconSend,
+  IconArrowUp,
   IconTrash,
   IconCopy,
   IconPlus,
   IconHistory,
   IconSettings,
   IconX,
-  IconSquareX,
+  IconSquareFilled,
   IconLayoutSidebar,
   IconFileText,
+  IconChevronDown,
 } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -87,7 +88,6 @@ function AIPage() {
   const navigate = useNavigate();
   const [prompt, setPrompt] = useState("");
   const [thinking, setThinking] = useState(false);
-  const [model, setModel] = useState<string>("");
   const [models, setModels] = useState<OllamaModel[]>([]);
   const [modelInfo, setModelInfo] = useState<OllamaModelInfo | null>(null);
   const [ollamaConnected, setOllamaConnected] = useState(false);
@@ -96,6 +96,7 @@ function AIPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
   const sendingRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const promptRef = useRef(prompt);
@@ -165,16 +166,17 @@ function AIPage() {
         const currentId = sessions.some((s: ChatSession) => s.id === data.currentId)
           ? data.currentId
           : (sessions[0]?.id ?? null);
-        return { sessions, currentId };
+        return { sessions, currentId, model: typeof data.model === "string" ? data.model : "" };
       }
     } catch {}
-    return { sessions: [], currentId: null };
+    return { sessions: [], currentId: null, model: "" };
   }, []);
 
   const [sessions, setSessions] = useState<ChatSession[]>(() => restore().sessions);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(
     () => restore().currentId,
   );
+  const [model, setModel] = useState<string>(() => restore().model);
   const currentSessionIdRef = useRef(currentSessionId);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showControls, setShowControls] = useState(false);
@@ -198,8 +200,11 @@ function AIPage() {
   const messages = currentSession?.messages ?? [];
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ sessions, currentId: currentSessionId }));
-  }, [sessions, currentSessionId]);
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ sessions, currentId: currentSessionId, model }),
+    );
+  }, [sessions, currentSessionId, model]);
 
   useEffect(() => {
     promptRef.current = prompt;
@@ -222,7 +227,9 @@ function AIPage() {
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    userScrolledUpRef.current = el.scrollHeight - el.scrollTop - el.clientHeight > 100;
+    const isUp = el.scrollHeight - el.scrollTop - el.clientHeight > 100;
+    userScrolledUpRef.current = isUp;
+    setShowScrollBottom(isUp);
   }, []);
 
   const loadModels = useCallback(async () => {
@@ -284,6 +291,35 @@ function AIPage() {
   useEffect(() => {
     if (sessions.length === 0) createSession();
   }, [sessions.length, createSession]);
+
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    sessionId: string;
+  } | null>(null);
+
+  const renameSession = useCallback(
+    (id: string) => {
+      const session = sessions.find((s) => s.id === id);
+      if (!session) return;
+      const name = window.prompt("Rename chat", session.name);
+      if (name && name.trim()) {
+        setSessions((prev) => prev.map((s) => (s.id === id ? { ...s, name: name.trim() } : s)));
+      }
+    },
+    [sessions],
+  );
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    document.addEventListener("click", close);
+    document.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("scroll", close, true);
+    };
+  }, [contextMenu]);
 
   const clearMessages = () => {
     setSessions((prev) =>
@@ -490,7 +526,11 @@ function AIPage() {
     if ((e.key === "Enter" || e.code === "Enter") && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       e.stopPropagation();
-      submitMessage();
+      if (streaming) {
+        stopStreaming();
+      } else {
+        submitMessage();
+      }
     }
   };
 
@@ -498,10 +538,14 @@ function AIPage() {
 
   const elapsed = liveStats ? ((Date.now() - liveStats.startTime) / 1000).toFixed(1) : "0";
   const activeModel = models.find((m) => m.name === model);
-  const canSend = (prompt.trim().length > 0 || attachments.length > 0) && !thinking && !!model;
+  const canSend =
+    ((prompt.trim().length > 0 || attachments.length > 0) && !thinking && !!model) || streaming;
 
   return (
-    <div className="flex min-h-0 flex-1 gap-3 overflow-hidden" style={{ maxHeight: "calc(100vh - 8rem)" }}>
+    <div
+      className="flex min-h-0 flex-1 gap-3 overflow-hidden"
+      style={{ maxHeight: "calc(100vh - 8rem)" }}
+    >
       {/* Sidebar */}
       {sidebarOpen && (
         <div className="flex w-56 shrink-0 flex-col overflow-hidden rounded-lg border bg-card">
@@ -530,12 +574,16 @@ function AIPage() {
                 <div
                   key={s.id}
                   className={cn(
-                    "group flex items-center gap-1 rounded-lg px-3 py-2 text-sm transition-colors cursor-pointer",
+                    "group relative flex items-center gap-1 rounded-lg px-3 py-2 text-sm transition-colors cursor-pointer",
                     s.id === currentSessionId
                       ? "bg-accent text-accent-foreground"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground",
                   )}
                   onClick={() => setCurrentSessionId(s.id)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setContextMenu({ x: e.clientX, y: e.clientY, sessionId: s.id });
+                  }}
                 >
                   <IconHistory className="h-4 w-4 shrink-0" stroke={1.5} />
                   <span className="flex-1 truncate">{s.name}</span>
@@ -556,6 +604,34 @@ function AIPage() {
         </div>
       )}
 
+      {/* Right-click context menu for chat history */}
+      {contextMenu && (
+        <div
+          className="fixed z-50 min-w-[140px] rounded-lg border bg-popover p-1 shadow-md"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <button
+            className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-foreground hover:bg-accent transition-colors"
+            onClick={() => {
+              renameSession(contextMenu.sessionId);
+              setContextMenu(null);
+            }}
+          >
+            Rename
+          </button>
+          <button
+            className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-destructive hover:bg-accent transition-colors"
+            onClick={() => {
+              deleteSession(contextMenu.sessionId);
+              setContextMenu(null);
+              if (sessions.length <= 1) createSession();
+            }}
+          >
+            Delete
+          </button>
+        </div>
+      )}
+
       {/* Main */}
       <div className="flex min-w-0 min-h-0 flex-1 flex-col overflow-hidden">
         {/* Header (static) */}
@@ -569,33 +645,14 @@ function AIPage() {
                 <IconLayoutSidebar className="h-4 w-4" stroke={1.5} />
               </button>
             )}
-            <div className="flex items-center gap-2">
-              <span
-                className={cn(
-                  "h-2 w-2 rounded-full",
-                  ollamaConnected ? "bg-emerald-500" : "bg-muted-foreground/50",
-                )}
-              />
-              <span className="text-sm font-medium">
-                {activeModel?.name ?? (ollamaConnected ? "Select a model" : "Ollama offline")}
-              </span>
-            </div>
-            {ollamaVersion && (
-              <span className="text-xs text-muted-foreground/50">v{ollamaVersion}</span>
-            )}
           </div>
-          <div className="flex items-center gap-1.5">
-            {streaming && (
-              <Button
-                variant="destructive"
-                size="sm"
-                className="h-7 gap-1.5 text-xs"
-                onClick={stopStreaming}
-              >
-                <IconSquareX className="h-3.5 w-3.5" stroke={1.5} />
-                Stop
-              </Button>
-            )}
+          <div className="flex items-center gap-2">
+            <span
+              className={cn(
+                "h-2 w-2 rounded-full shrink-0",
+                ollamaConnected ? "bg-emerald-500" : "bg-muted-foreground/50",
+              )}
+            />
             <Select value={model} onValueChange={setModel}>
               <SelectTrigger className="h-7 w-auto min-w-[100px] rounded-md border px-2 text-xs font-mono shadow-none">
                 <SelectValue placeholder="Model" />
@@ -720,54 +777,71 @@ function AIPage() {
         </div>
 
         {/* Chat area — the ONLY thing that scrolls in the right column */}
-        <ScrollArea ref={scrollRef} className="min-h-0 flex-1" onScroll={handleScroll}>
-          <div className="mx-auto max-w-3xl px-4 py-6">
-            {messages.length === 0 && !streaming ? (
-              <div className="flex flex-col items-center justify-center py-20 text-center">
-                <div className="mb-4 grid h-12 w-12 place-items-center rounded-xl border bg-muted/30">
-                  <IconRobot className="h-6 w-6 text-primary" stroke={1.5} />
-                </div>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Ask about Docker, compose files, or anything else.
-                </p>
-                <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                  <kbd className="rounded border bg-muted/50 px-1.5 py-0.5 text-[10px] font-mono">
-                    Ctrl
-                  </kbd>
-                  <span>+</span>
-                  <kbd className="rounded border bg-muted/50 px-1.5 py-0.5 text-[10px] font-mono">
-                    Enter
-                  </kbd>
-                  <span>to send</span>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {messages.map((m) => (
-                  <MessageBubble key={m.id} m={m} />
-                ))}
-                {thinking && !streamContent && (
-                  <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                    <IconLoader2 className="h-4 w-4 animate-spin" />
-                    <span>Thinking...</span>
+        <div className="relative min-h-0 flex-1">
+          <ScrollArea ref={scrollRef} className="h-full chat-scrollarea" onScroll={handleScroll}>
+            <div className="mx-auto max-w-3xl px-4 py-6">
+              {messages.length === 0 && !streaming ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                  <div className="mb-4 grid h-12 w-12 place-items-center rounded-xl border bg-muted/30">
+                    <IconRobot className="h-6 w-6 text-primary" stroke={1.5} />
                   </div>
-                )}
-                {streaming && streamContent && (
-                  <MessageBubble
-                    m={{
-                      id: "stream",
-                      role: "assistant",
-                      content: streamContent,
-                      ts: new Date().toISOString(),
-                    }}
-                    isStreaming
-                  />
-                )}
-                <div ref={endRef} />
-              </div>
-            )}
-          </div>
-        </ScrollArea>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Ask about Docker, compose files, or anything else.
+                  </p>
+                  <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                    <kbd className="rounded border bg-muted/50 px-1.5 py-0.5 text-[10px] font-mono">
+                      Ctrl
+                    </kbd>
+                    <span>+</span>
+                    <kbd className="rounded border bg-muted/50 px-1.5 py-0.5 text-[10px] font-mono">
+                      Enter
+                    </kbd>
+                    <span>to send</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {messages.map((m) => (
+                    <MessageBubble key={m.id} m={m} />
+                  ))}
+                  {thinking && !streamContent && (
+                    <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                      <IconLoader2 className="h-4 w-4 animate-spin" />
+                      <span>Thinking...</span>
+                    </div>
+                  )}
+                  {streaming && streamContent && (
+                    <MessageBubble
+                      m={{
+                        id: "stream",
+                        role: "assistant",
+                        content: streamContent,
+                        ts: new Date().toISOString(),
+                      }}
+                      isStreaming
+                    />
+                  )}
+                  <div ref={endRef} />
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+
+          {showScrollBottom && (
+            <button
+              onClick={() =>
+                scrollRef.current?.scrollTo({
+                  top: scrollRef.current.scrollHeight,
+                  behavior: "smooth",
+                })
+              }
+              type="button"
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex h-8 w-8 items-center justify-center rounded-full border bg-background shadow-md hover:bg-accent transition-colors animate-in fade-in"
+            >
+              <IconChevronDown className="h-4 w-4" stroke={1.5} />
+            </button>
+          )}
+        </div>
 
         {/* Stats bar (static) */}
         {(streaming || metrics) && (
@@ -805,11 +879,15 @@ function AIPage() {
         )}
 
         {/* Composer (static) */}
-        <div className="shrink-0 border-t p-4">
+        <div className="shrink-0 border-t p-4 pb-0">
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              submitMessage();
+              if (streaming) {
+                stopStreaming();
+              } else {
+                submitMessage();
+              }
             }}
             className="relative rounded-xl border bg-background shadow-sm transition-shadow focus-within:shadow-md focus-within:border-primary/40"
           >
@@ -838,21 +916,19 @@ function AIPage() {
               disabled={!model}
             />
             <div className="absolute bottom-2 right-2 flex items-center gap-1">
-              {(prompt.trim() || attachments.length > 0) && !thinking && (
-                <span className="text-[10px] text-muted-foreground/40 hidden sm:block">
-                  Ctrl+Enter
-                </span>
-              )}
               <Button
                 type="submit"
                 size="sm"
                 className="h-8 w-8 rounded-lg p-0"
+                style={{ backgroundColor: "#4D8DF0", color: "white" }}
                 disabled={!canSend}
               >
-                {thinking ? (
+                {streaming ? (
+                  <IconSquareFilled className="h-4 w-4" />
+                ) : thinking ? (
                   <IconLoader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <IconSend className="h-4 w-4" stroke={1.5} />
+                  <IconArrowUp className="h-4 w-4" stroke={1.5} />
                 )}
               </Button>
             </div>
@@ -993,10 +1069,13 @@ function MessageBubble({ m, isStreaming }: { m: ChatMessage; isStreaming?: boole
             </ReactMarkdown>
           </div>
         )}
-        {!isUser && !isStreaming && (
+        {!isStreaming && (
           <button
             onClick={copy}
-            className="mt-1 rounded-md px-1.5 py-0.5 text-[10px] text-muted-foreground/40 hover:text-foreground transition-colors"
+            className={cn(
+              "mt-1 rounded-md px-1.5 py-0.5 text-[10px] text-muted-foreground/40 hover:text-foreground transition-colors",
+              isUser && "float-right",
+            )}
           >
             {copied ? "Copied!" : <IconCopy className="h-3.5 w-3.5 inline" stroke={1.5} />}
           </button>

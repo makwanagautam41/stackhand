@@ -161,36 +161,15 @@
   }
 }
 
-/* Custom scrollbars — global */
+/* Custom scrollbars — globally hidden (consistent cross-platform) */
 * {
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in oklab, var(--color-foreground) 18%, transparent) transparent;
-}
-*::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-*::-webkit-scrollbar-track {
-  background: transparent;
-}
-*::-webkit-scrollbar-thumb {
-  background: color-mix(in oklab, var(--color-foreground) 15%, transparent);
-  border: 2px solid transparent;
-  background-clip: padding-box;
-  border-radius: 9999px;
-}
-*::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in oklab, var(--color-foreground) 30%, transparent);
-  background-clip: padding-box;
-  border: 2px solid transparent;
-}
-*::-webkit-scrollbar-corner {
-  background: transparent;
-}
-.scrollbar-none {
   scrollbar-width: none;
 }
-.scrollbar-none::-webkit-scrollbar {
+*::-webkit-scrollbar {
+  display: none;
+}
+/* Hide Radix ScrollArea scrollbar too */
+.chat-scrollarea [data-radix-scroll-area-scrollbar] {
   display: none;
 }
 
