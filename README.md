@@ -21,20 +21,33 @@ Add the following to your shell config (`~/.zshrc`, `~/.bashrc`, or `~/.config/s
 
 ```bash
 STACKHAND_DIR="$HOME/Workspace/stackhand"
-SH_PID="$STACKHAND_DIR/stackhand.pid"
-SH_LOG="$STACKHAND_DIR/stackhand.log"
+SH_API_LOG="$STACKHAND_DIR/stackhand-api.log"
+SH_UI_LOG="$STACKHAND_DIR/stackhand-ui.log"
 
 stackhand() {
+  local api_pid_file="$STACKHAND_DIR/.api.pid"
+  local ui_pid_file="$STACKHAND_DIR/.ui.pid"
+
   case "${1:-start}" in
     start)
       cd "$STACKHAND_DIR" || return 1
       [ ! -f dist/src/main.js ] && npm run build
-      nohup node dist/src/main.js >> "$SH_LOG" 2>&1 &
-      echo $! > "$SH_PID"
-      echo "Stackhand started (PID: $(cat "$SH_PID")) — http://localhost:22443"
+      # Start backend (API)
+      nohup node dist/src/main.js >> "$SH_API_LOG" 2>&1 &
+      echo $! > "$api_pid_file"
+      # Start frontend (SSR dev server)
+      cd client && nohup npx vite dev --host 0.0.0.0 >> "$SH_UI_LOG" 2>&1 &
+      echo $! > "$ui_pid_file"
+      cd "$STACKHAND_DIR"
+      echo "Stackhand started"
+      echo "  API:  http://localhost:${PORT:-22443}"
+      echo "  UI:   http://localhost:${FRONTEND_PORT:-22080}"
       ;;
     stop)
-      [ -f "$SH_PID" ] && kill "$(cat "$SH_PID")" 2>/dev/null && rm -f "$SH_PID" && echo "Stopped" || echo "Not running"
+      local stopped=false
+      [ -f "$api_pid_file" ] && kill "$(cat "$api_pid_file")" 2>/dev/null && rm -f "$api_pid_file" && stopped=true
+      [ -f "$ui_pid_file" ] && kill "$(cat "$ui_pid_file")" 2>/dev/null && rm -f "$ui_pid_file" && stopped=true
+      $stopped && echo "Stopped" || echo "Not running"
       ;;
     restart)
       stackhand stop; sleep 1; stackhand start
@@ -43,10 +56,15 @@ stackhand() {
       cd "$STACKHAND_DIR" && npm run build
       ;;
     logs)
-      [ -f "$SH_LOG" ] && tail -f "$SH_LOG" || echo "No logs yet"
+      local f="${2:-api}"
+      case "$f" in
+        api) tail -f "$SH_API_LOG" ;;
+        ui)  tail -f "$SH_UI_LOG" ;;
+        *)   echo "Usage: stackhand logs {api|ui}" ;;
+      esac
       ;;
     *)
-      echo "Usage: stackhand {start|stop|restart|build|logs}"
+      echo "Usage: stackhand {start|stop|restart|build|logs [api|ui]}"
       ;;
   esac
 }
@@ -55,12 +73,15 @@ stackhand() {
 Then reload your shell and use:
 
 ```bash
-stackhand start       # Build (if needed) + start server
-stackhand stop        # Stop server
+stackhand start       # Build (if needed) + start API + UI
+stackhand stop        # Stop both servers
 stackhand restart     # Restart
 stackhand build       # Rebuild only
-stackhand logs        # Tail live logs
+stackhand logs        # Tail API logs
+stackhand logs ui     # Tail frontend logs
 ```
+
+The frontend (port `FRONTEND_PORT`, default 22080) proxies `/api` and `/socket.io` to the backend.
 
 ### Data Directory
 

@@ -27,9 +27,9 @@ import { CommonModule } from './common/common.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ServeStaticModule.forRoot({
-      rootPath: join(__dirname, '..', 'client', '.output', 'public'),
-      exclude: ['/api/(.*)', '/socket.io/(.*)', '/api/docs/(.*)'],
-      serveStaticOptions: { index: false },
+      rootPath: join(__dirname, '..', '..', 'client', '.output', 'public'),
+      exclude: ['/api/*path', '/socket.io/*path', '/api/docs/*path'],
+      serveStaticOptions: { index: ['index.html'] },
     }),
     PrismaModule,
     AuthModule,

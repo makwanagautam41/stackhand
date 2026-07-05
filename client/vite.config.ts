@@ -28,8 +28,7 @@ function readRootEnv() {
   return entries;
 }
 
-function getBackendOrigin() {
-  const rootEnv = readRootEnv();
+function getBackendOrigin(rootEnv: Map<string, string>) {
   const explicit =
     process.env.STACKHAND_BACKEND_ORIGIN ||
     rootEnv.get("STACKHAND_BACKEND_ORIGIN");
@@ -41,22 +40,30 @@ function getBackendOrigin() {
   return `http://${normalizedHost}:${port}`;
 }
 
-function getFrontendPort() {
-  const rootEnv = readRootEnv();
+function getFrontendPort(rootEnv: Map<string, string>) {
   return parseInt(
     process.env.FRONTEND_PORT || rootEnv.get("FRONTEND_PORT") || "22080",
     10,
   );
 }
 
-const backendOrigin = getBackendOrigin();
-const frontendPort = getFrontendPort();
+function getApiToken(rootEnv: Map<string, string>) {
+  return process.env.STACKHAND_API_TOKEN || rootEnv.get("STACKHAND_API_TOKEN") || "dev-token";
+}
+
+const rootEnv = readRootEnv();
+const backendOrigin = getBackendOrigin(rootEnv);
+const frontendPort = getFrontendPort(rootEnv);
+const apiToken = getApiToken(rootEnv);
 
 export default defineConfig({
   tanstackStart: {
     server: { entry: "server" },
   },
   vite: {
+    define: {
+      "import.meta.env.VITE_STACKHAND_API_TOKEN": JSON.stringify(apiToken),
+    },
     server: {
       port: frontendPort,
       proxy: {

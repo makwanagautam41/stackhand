@@ -33,7 +33,11 @@ function getApiBase(): string {
 }
 
 function getToken(): string {
-  if (typeof window === 'undefined') return process.env.STACKHAND_API_TOKEN || "dev-token";
+  const envToken =
+    (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_STACKHAND_API_TOKEN) ||
+    (typeof process !== "undefined" && process.env.STACKHAND_API_TOKEN);
+  if (envToken) return envToken;
+  if (typeof window === 'undefined') return "dev-token";
   return localStorage.getItem(TOKEN_KEY) || "dev-token";
 }
 
