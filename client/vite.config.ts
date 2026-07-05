@@ -51,10 +51,15 @@ function getApiToken(rootEnv: Map<string, string>) {
   return process.env.STACKHAND_API_TOKEN || rootEnv.get("STACKHAND_API_TOKEN") || "dev-token";
 }
 
+function getDefaultWorkspaceRoot(rootEnv: Map<string, string>) {
+  return process.env.DEFAULT_WORKSPACE_ROOT || rootEnv.get("DEFAULT_WORKSPACE_ROOT") || "";
+}
+
 const rootEnv = readRootEnv();
 const backendOrigin = getBackendOrigin(rootEnv);
 const frontendPort = getFrontendPort(rootEnv);
 const apiToken = getApiToken(rootEnv);
+const defaultWorkspaceRoot = getDefaultWorkspaceRoot(rootEnv);
 
 export default defineConfig({
   tanstackStart: {
@@ -63,6 +68,7 @@ export default defineConfig({
   vite: {
     define: {
       "import.meta.env.VITE_STACKHAND_API_TOKEN": JSON.stringify(apiToken),
+      "import.meta.env.VITE_DEFAULT_WORKSPACE_ROOT": JSON.stringify(defaultWorkspaceRoot),
     },
     server: {
       port: frontendPort,

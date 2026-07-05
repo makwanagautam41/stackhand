@@ -1,6 +1,6 @@
 import { useRef, useState, type DragEvent } from "react";
-import { IconFolder, IconFolderOpen, IconHome, IconUpload, IconX } from "@tabler/icons-react";
-import { Button } from "@/components/ui/button";
+import { IconFolder, IconFolderOpen, IconHome, IconUpload, IconX, IconAlertCircle } from "@tabler/icons-react";
+import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -26,26 +26,17 @@ export function FolderPicker({
     const first = files[0] as File & { webkitRelativePath?: string };
     const rel = first.webkitRelativePath ?? "";
     const folderName = rel.split("/")[0] || first.name;
-    commit(folderName);
+    toast.error("Full path not available via browser", {
+      description: "Please type the full path manually below instead.",
+    });
   };
 
   const onDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setDragOver(false);
-    const items = e.dataTransfer.items;
-    if (items && items.length > 0) {
-      const item = items[0];
-      const entry = (
-        item as unknown as {
-          webkitGetAsEntry?: () => { isDirectory: boolean; name: string } | null;
-        }
-      ).webkitGetAsEntry?.();
-      if (entry?.isDirectory) {
-        commit(entry.name);
-        return;
-      }
-    }
-    handleFiles(e.dataTransfer.files);
+    toast.error("Full path not available via drag & drop", {
+      description: "Please type the full path manually below instead.",
+    });
   };
 
   return (

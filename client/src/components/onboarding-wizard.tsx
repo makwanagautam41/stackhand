@@ -38,7 +38,8 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
   const [description, setDescription] = useState("");
   const [color, setColor] = useState(WORKSPACE_COLORS[0]);
   const [icon, setIcon] = useState(WORKSPACE_ICONS[0]);
-  const [rootFolder, setRootFolder] = useState("");
+  const defaultRoot = (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_DEFAULT_WORKSPACE_ROOT) || "";
+  const [rootFolder, setRootFolder] = useState(defaultRoot);
   const [checking, setChecking] = useState(false);
   const [checked, setChecked] = useState(false);
   const [models, setModels] = useState<OllamaModel[]>(DEFAULT_MODELS.map((m) => ({ ...m })));
@@ -134,7 +135,7 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
                   await api.createWorkspace({
                     name: "sample-workspace",
                     description: "Sample workspace with starter content",
-                    rootFolderPath: "",
+                    rootFolderPath: defaultRoot || undefined,
                   });
                   await refresh();
                   toast.success("Sample workspace loaded", {
@@ -273,6 +274,14 @@ export function OnboardingWizard({ onDone }: { onDone: () => void }) {
                   </p>
                 </div>
                 <FolderPicker value={rootFolder} onChange={setRootFolder} />
+                {rootFolder && name && (
+                  <p className="text-[11px] text-muted-foreground/70 font-mono">
+                    →{" "}
+                    {rootFolder}/<span className="text-amber-500">development-workspace</span>/
+                    {name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64)}
+                    /
+                  </p>
+                )}
               </div>
             )}
 
