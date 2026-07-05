@@ -121,7 +121,21 @@ export function AppSidebar() {
           </SidebarGroup>
         ))}
       </SidebarContent>
-      <SidebarFooter className="border-t p-3.5"></SidebarFooter>
+      <SidebarFooter className="border-t">
+        <div className="flex items-center justify-between group-data-[collapsible=icon]:hidden">
+          {import.meta.env.DEV ? (
+            <span className="inline-flex items-center gap-1.5 rounded-xs bg-amber-100 px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-wider text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+              Development
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-wider text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              production
+            </span>
+          )}
+        </div>
+      </SidebarFooter>
     </Sidebar>
   );
 }
