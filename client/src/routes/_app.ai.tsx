@@ -827,7 +827,10 @@ function AIPage() {
             </div>
           </ScrollArea>
 
-          {showScrollBottom && (
+        </div>
+
+        {showScrollBottom && (
+          <div className="flex justify-center py-2">
             <button
               onClick={() =>
                 scrollRef.current?.scrollTo({
@@ -836,12 +839,12 @@ function AIPage() {
                 })
               }
               type="button"
-              className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex h-8 w-8 items-center justify-center rounded-full border bg-background shadow-md hover:bg-accent transition-colors animate-in fade-in"
+              className="flex h-8 w-8 items-center justify-center rounded-full border bg-background shadow-md hover:bg-accent transition-colors"
             >
               <IconChevronDown className="h-4 w-4" stroke={1.5} />
             </button>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Stats bar (static) */}
         {(streaming || metrics) && (
