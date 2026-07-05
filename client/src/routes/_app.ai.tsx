@@ -1,23 +1,25 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import {
   IconRobot,
   IconLoader2,
   IconSend,
-  IconSparkles,
   IconTrash,
   IconUser,
-  IconWand,
   IconCopy,
-  IconArrowRight,
-  IconCornerDownLeft,
-  IconBolt,
+  IconPlus,
+  IconHistory,
+  IconSettings,
+  IconX,
+  IconSquareX,
+  IconLayoutSidebar,
 } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Slider } from "@/components/ui/slider";
 import {
   Select,
   SelectContent,
@@ -25,318 +27,736 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useWorkspaces } from "@/lib/workspace-store";
-import type { ChatMessage } from "@/lib/types";
+import type {
+  ChatMessage,
+  OllamaModel,
+  OllamaModelInfo,
+  OllamaMetrics,
+  OllamaChatOptions,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
-import { subscribeToOllamaChat, useSocket } from "@/lib/socket";
 
 export const Route = createFileRoute("/_app/ai")({
   component: AIPage,
   head: () => ({
     meta: [
-      { title: "AI Assistant · Stackhand" },
-      { name: "description", content: "Chat with local models to generate and explain compose files." },
+      { title: "AI Studio · Stackhand" },
+      {
+        name: "description",
+        content:
+          "Chat with local LLMs via Ollama. Generate stacks, run custom prompts, and monitor generation stats.",
+      },
     ],
   }),
 });
 
-const SUGGESTIONS = [
-  { label: "Postgres with persistent storage", icon: "🐘" },
-  { label: "Redis stack with auth", icon: "🧠" },
-  { label: "Explain this docker-compose", icon: "📖" },
-  { label: "Find image for MinIO", icon: "🪣" },
-];
+interface ChatSession {
+  id: string;
+  name: string;
+  messages: ChatMessage[];
+  createdAt: string;
+}
 
-const PRESETS = [
-  { id: "optimize", label: "Optimize", prompt: "Optimize this docker-compose for production." },
-  { id: "healthcheck", label: "Add healthcheck", prompt: "Add sensible healthchecks to every service." },
-  { id: "swarm", label: "Convert to Swarm", prompt: "Convert this compose file to Docker Swarm format with deploy specs." },
-  { id: "explain", label: "Explain", prompt: "Explain what this compose file does line by line." },
-  { id: "secure", label: "Harden security", prompt: "Suggest security hardening changes for this stack." },
-];
+const STORAGE_KEY = "stackhand-ai-studio";
 
 function AIPage() {
-  const {
-    current,
-    chatByWs,
-    chatByStack,
-    appendChat,
-    appendStackChat,
-    clearChat,
-    clearStackChat,
-    stacksByWs,
-  } = useWorkspaces();
+  const { current } = useWorkspaces();
   const navigate = useNavigate();
   const [prompt, setPrompt] = useState("");
   const [thinking, setThinking] = useState(false);
   const [model, setModel] = useState<string>("");
-  const [scope, setScope] = useState<string>("workspace");
+  const [models, setModels] = useState<OllamaModel[]>([]);
+  const [modelInfo, setModelInfo] = useState<OllamaModelInfo | null>(null);
+  const [ollamaConnected, setOllamaConnected] = useState(false);
+  const [ollamaVersion, setOllamaVersion] = useState<string>("");
   const endRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const userScrolledUpRef = useRef(false);
+  const sendingRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const promptRef = useRef(prompt);
 
-  const enabledModels = useMemo(() => current?.models.filter((m) => m.enabled) ?? [], [current]);
-  const stacks = current ? stacksByWs[current.id] ?? [] : [];
+  const restore = useCallback(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const data = JSON.parse(saved);
+        const sessions = Array.isArray(data.sessions) ? data.sessions : [];
+        const currentId = sessions.some((s: ChatSession) => s.id === data.currentId) ? data.currentId : (sessions[0]?.id ?? null);
+        return { sessions, currentId };
+      }
+    } catch {}
+    return { sessions: [], currentId: null };
+  }, []);
+
+  const [sessions, setSessions] = useState<ChatSession[]>(() => restore().sessions);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(
+    () => restore().currentId,
+  );
+  const currentSessionIdRef = useRef(currentSessionId);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [showControls, setShowControls] = useState(false);
+  const [showModelInfo, setShowModelInfo] = useState(false);
+  const [genOptions, setGenOptions] = useState<OllamaChatOptions>({
+    temperature: 0.7,
+    topP: 0.9,
+    topK: 40,
+    repeatPenalty: 1.1,
+    maxTokens: 4096,
+  });
+  const [seed, setSeed] = useState<string>("");
+  const [streamContent, setStreamContent] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [metrics, setMetrics] = useState<OllamaMetrics | null>(null);
+  const [liveStats, setLiveStats] = useState<{ startTime: number; tokensReceived: number } | null>(
+    null,
+  );
+
+  const currentSession = sessions.find((s) => s.id === currentSessionId);
+  const messages = currentSession?.messages ?? [];
 
   useEffect(() => {
-    if (!model && enabledModels[0]) setModel(enabledModels[0].id);
-  }, [model, enabledModels]);
-
-  const messages: ChatMessage[] = current
-    ? scope === "workspace"
-      ? chatByWs[current.id] ?? []
-      : chatByStack[scope] ?? []
-    : [];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ sessions, currentId: currentSessionId }));
+  }, [sessions, currentSessionId]);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, thinking]);
+    promptRef.current = prompt;
+  }, [prompt]);
 
-  if (!current) return null;
+  useEffect(() => {
+    currentSessionIdRef.current = currentSessionId;
+  }, [currentSessionId]);
 
-  const append = (msg: ChatMessage) => {
-    if (scope === "workspace") appendChat(current.id, msg);
-    else appendStackChat(scope, msg);
-  };
+  useEffect(() => {
+    if (!model && models.length > 0) setModel(models[0].name);
+  }, [model, models]);
 
-  const clear = () => {
-    if (scope === "workspace") clearChat(current.id);
-    else clearStackChat(scope);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || userScrolledUpRef.current) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [messages, streamContent, thinking]);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    userScrolledUpRef.current = el.scrollHeight - el.scrollTop - el.clientHeight > 100;
+  }, []);
+
+  const loadModels = useCallback(async () => {
+    try {
+      const status = await api.ollamaStatus();
+      setOllamaConnected(status.connected);
+      if (status.connected) {
+        const [modelList, ver] = await Promise.all([api.ollamaModels(), api.ollamaVersion()]);
+        setModels(
+          modelList.map((m) => ({
+            id: m.id,
+            name: m.name,
+            size: formatSize(m.size),
+            enabled: true,
+          })),
+        );
+        setOllamaVersion(ver.version ?? "");
+        if (!model && modelList.length > 0) setModel(modelList[0].name);
+      }
+    } catch {
+      setOllamaConnected(false);
+    }
+  }, [model]);
+
+  useEffect(() => {
+    loadModels();
+  }, [loadModels]);
+
+  useEffect(() => {
+    if (model && ollamaConnected) {
+      api
+        .ollamaModelInfo(model)
+        .then(setModelInfo)
+        .catch(() => setModelInfo(null));
+    } else setModelInfo(null);
+  }, [model, ollamaConnected]);
+
+  const createSession = useCallback(() => {
+    const id = crypto.randomUUID();
+    const session: ChatSession = {
+      id,
+      name: "New chat",
+      messages: [],
+      createdAt: new Date().toISOString(),
+    };
+    setSessions((prev) => [...prev, session]);
+    setCurrentSessionId(id);
+    return id;
+  }, []);
+
+  const deleteSession = useCallback(
+    (id: string) => {
+      setSessions((prev) => {
+        const next = prev.filter((s) => s.id !== id);
+        if (currentSessionIdRef.current === id) setCurrentSessionId(next[0]?.id ?? null);
+        return next;
+      });
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (sessions.length === 0) createSession();
+  }, [sessions.length, createSession]);
+
+  const clearMessages = () => {
+    setSessions((prev) =>
+      prev.map((s) => (s.id === currentSessionId ? { ...s, messages: [] } : s)),
+    );
+    setMetrics(null);
+    setStreamContent("");
     toast("Chat cleared");
   };
 
-  const send = async (text: string) => {
-    if (!text.trim()) return;
+  const formatDuration = (ns: number) => {
+    const ms = ns / 1_000_000;
+    return ms < 1000 ? `${ms.toFixed(0)} ms` : `${(ms / 1000).toFixed(2)} sec`;
+  };
+
+  const updateSessionName = useCallback((sessionId: string, content: string) => {
+    const name = content.trim().slice(0, 40).split("\n")[0];
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.id === sessionId ? { ...s, name: name + (content.trim().length > 40 ? "…" : "") } : s,
+      ),
+    );
+  }, []);
+
+  const stopStreaming = useCallback(() => {
+    const sessionId = currentSessionIdRef.current;
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    setThinking(false);
+    setStreaming(false);
+    if (streamContent && sessionId) {
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === sessionId
+            ? {
+                ...s,
+                messages: [
+                  ...s.messages,
+                  {
+                    id: crypto.randomUUID(),
+                    role: "assistant",
+                    content: streamContent + "\n\n*[stopped]*",
+                    ts: new Date().toISOString(),
+                  },
+                ],
+              }
+            : s,
+        ),
+      );
+    }
+    setStreamContent("");
+    setLiveStats(null);
+  }, [streamContent]);
+
+  const sendStream = async (text: string) => {
+    if (sendingRef.current || !text.trim() || !model) return;
+    let sessionId = currentSessionIdRef.current;
+    if (!sessionId) {
+      const id = crypto.randomUUID();
+      const session: ChatSession = { id, name: "New chat", messages: [], createdAt: new Date().toISOString() };
+      setSessions((prev) => [...prev, session]);
+      setCurrentSessionId(id);
+      currentSessionIdRef.current = id;
+      sessionId = id;
+    }
+    sendingRef.current = true;
+
+    const existing = sessions.find((s) => s.id === sessionId);
+    const sessionMessages = existing?.messages ?? [];
+    const isFirst = sessionMessages.length === 0;
+
     const user: ChatMessage = {
       id: crypto.randomUUID(),
       role: "user",
       content: text.trim(),
       ts: new Date().toISOString(),
     };
-    append(user);
+    setSessions((prev) =>
+      prev.map((s) => (s.id === sessionId ? { ...s, messages: [...s.messages, user] } : s)),
+    );
+    if (isFirst) updateSessionName(sessionId, text);
     setPrompt("");
     setThinking(true);
+    setStreaming(true);
+    setStreamContent("");
+    setMetrics(null);
+    setLiveStats({ startTime: Date.now(), tokensReceived: 0 });
+
+    let fullContent = "";
+    let lastMetrics: OllamaMetrics | null = null;
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
-      const res = await api.ollamaChat(model, [...messages, user]);
-      append({
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: res.content,
-        ts: new Date().toISOString(),
+      const allMessages = [...sessionMessages, user];
+      const response = await fetch(api.ollamaChatStreamUrl(), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("stackhand-api-token") || "dev-token"}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: allMessages,
+          options: { ...genOptions, seed: seed ? parseInt(seed, 10) : undefined },
+        }),
+        signal: controller.signal,
       });
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No response body");
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith("data: ")) continue;
+          const data = trimmed.slice(6);
+          if (data === "[DONE]") continue;
+          if (data.startsWith("{")) {
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.message?.content) {
+                fullContent += parsed.message.content;
+                setStreamContent(fullContent);
+                setLiveStats((prev) =>
+                  prev ? { ...prev, tokensReceived: prev.tokensReceived + 1 } : prev,
+                );
+              }
+              if (parsed.done) {
+                lastMetrics = {
+                  promptEvalCount: parsed.prompt_eval_count ?? 0,
+                  evalCount: parsed.eval_count ?? 0,
+                  totalDuration: parsed.total_duration ?? 0,
+                  loadDuration: parsed.load_duration ?? 0,
+                  promptEvalDuration: parsed.prompt_eval_duration ?? 0,
+                  evalDuration: parsed.eval_duration ?? 0,
+                };
+              }
+            } catch {}
+          }
+        }
+      }
+
+      if (fullContent) {
+        setSessions((prev) =>
+          prev.map((s) =>
+            s.id === sessionId
+              ? {
+                  ...s,
+                  messages: [
+                    ...s.messages,
+                    {
+                      id: crypto.randomUUID(),
+                      role: "assistant",
+                      content: fullContent,
+                      ts: new Date().toISOString(),
+                    },
+                  ],
+                }
+              : s,
+          ),
+        );
+      }
+      if (lastMetrics) setMetrics(lastMetrics);
     } catch (e: any) {
-      toast.error(e.message ?? "Chat failed");
+      if (e.name !== "AbortError") toast.error(e.message ?? "Chat failed");
     } finally {
+      sendingRef.current = false;
+      abortRef.current = null;
       setThinking(false);
+      setStreaming(false);
+      setStreamContent("");
+      setLiveStats(null);
     }
   };
 
-  const scopedStack = stacks.find((s) => s.id === scope);
-  const activeModel = enabledModels.find((m) => m.id === model);
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.key === "Enter" || e.code === "Enter") && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      e.stopPropagation();
+      const text = promptRef.current;
+      if (text.trim()) sendStream(text);
+    }
+  };
+
+  if (!current) return null;
+
+  const elapsed = liveStats ? ((Date.now() - liveStats.startTime) / 1000).toFixed(1) : "0";
+  const activeModel = models.find((m) => m.name === model);
 
   return (
-    <div className="flex h-[calc(100vh-9rem)] flex-col">
-      {/* Header */}
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">AI Assistant</h1>
-          <p className="text-sm text-muted-foreground">
-            Local models via Ollama · {current.name}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Select value={scope} onValueChange={setScope}>
-            <SelectTrigger className="w-[200px] rounded-md font-mono text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="workspace">Workspace chat</SelectItem>
-              {stacks.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  Stack · {s.name}
-                </SelectItem>
+    <div className="flex h-full gap-3">
+      {/* Sidebar */}
+      {sidebarOpen && (
+        <div className="flex w-56 shrink-0 flex-col overflow-hidden rounded-lg border bg-card">
+          <div className="flex items-center justify-between border-b px-3 py-2">
+            <span className="font-mono text-xs font-medium text-foreground">Chats</span>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <IconLayoutSidebar className="h-4 w-4" stroke={1.5} />
+            </button>
+          </div>
+          <div className="p-2">
+            <button
+              onClick={createSession}
+              className="flex w-full items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-sm text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors"
+            >
+              <IconPlus className="h-4 w-4" stroke={1.5} />
+              New chat
+            </button>
+          </div>
+          <ScrollArea className="flex-1 px-2 pb-2">
+            <div className="space-y-0.5">
+              {sessions.map((s) => (
+                <div
+                  key={s.id}
+                  className={cn(
+                    "group flex items-center gap-1 rounded-lg px-3 py-2 text-sm transition-colors cursor-pointer",
+                    s.id === currentSessionId
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                  onClick={() => setCurrentSessionId(s.id)}
+                >
+                  <IconHistory className="h-4 w-4 shrink-0" stroke={1.5} />
+                  <span className="flex-1 truncate">{s.name}</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteSession(s.id);
+                      if (sessions.length <= 1) createSession();
+                    }}
+                    className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
+                  >
+                    <IconX className="h-3.5 w-3.5" stroke={1.5} />
+                  </button>
+                </div>
               ))}
-            </SelectContent>
-          </Select>
-          {enabledModels.length > 0 ? (
+            </div>
+          </ScrollArea>
+        </div>
+      )}
+
+      {/* Main */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b px-4 py-2">
+          <div className="flex items-center gap-3">
+            {!sidebarOpen && (
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <IconLayoutSidebar className="h-4 w-4" stroke={1.5} />
+              </button>
+            )}
+            <div className="flex items-center gap-2">
+              <span
+                className={cn(
+                  "h-2 w-2 rounded-full",
+                  ollamaConnected ? "bg-emerald-500" : "bg-muted-foreground/50",
+                )}
+              />
+              <span className="text-sm font-medium">
+                {activeModel?.name ?? (ollamaConnected ? "Select a model" : "Ollama offline")}
+              </span>
+            </div>
+            {ollamaVersion && (
+              <span className="text-xs text-muted-foreground/50">v{ollamaVersion}</span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5">
+            {streaming && (
+              <Button
+                variant="destructive"
+                size="sm"
+                className="h-7 gap-1.5 text-xs"
+                onClick={stopStreaming}
+              >
+                <IconSquareX className="h-3.5 w-3.5" stroke={1.5} />
+                Stop
+              </Button>
+            )}
             <Select value={model} onValueChange={setModel}>
-              <SelectTrigger className="w-[180px] rounded-md font-mono text-xs">
+              <SelectTrigger className="h-7 w-auto min-w-[100px] rounded-md border px-2 text-xs font-mono shadow-none">
                 <SelectValue placeholder="Model" />
               </SelectTrigger>
               <SelectContent>
-                {enabledModels.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
+                {models.map((m) => (
+                  <SelectItem key={m.id} value={m.name} className="font-mono text-xs">
                     {m.name}
                   </SelectItem>
                 ))}
+                {models.length === 0 && (
+                  <div className="px-2 py-1 text-xs text-muted-foreground">
+                    {ollamaConnected ? "No models" : "Ollama offline"}
+                  </div>
+                )}
               </SelectContent>
             </Select>
-          ) : (
-            <div className="text-xs text-muted-foreground">No models enabled</div>
-          )}
-          {messages.length > 0 && (
-            <Button variant="ghost" size="sm" className="rounded-md" onClick={clear}>
-              <IconTrash className="mr-1.5 h-3.5 w-3.5" stroke={1.75} /> Clear
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* Chat surface */}
-      <div className="flex flex-1 flex-col overflow-hidden rounded-md border bg-card">
-        {/* Meta bar */}
-        <div className="flex items-center justify-between gap-2 border-b bg-muted/30 px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <span className="flex h-1.5 w-1.5 items-center justify-center">
-              <span
-                className={cn(
-                  "h-1.5 w-1.5 rounded-full",
-                  current.ollamaConnected ? "bg-emerald-500" : "bg-muted-foreground",
-                )}
-              />
-            </span>
-            <span>{current.ollamaConnected ? "connected" : "offline"}</span>
-            <span className="text-muted-foreground/50">·</span>
-            <span>{activeModel?.name ?? "no model"}</span>
-            <span className="text-muted-foreground/50">·</span>
-            <span>
-              {scope === "workspace" ? "workspace chat" : `stack: ${scopedStack?.name}`}
-            </span>
+            <Dialog open={showControls} onOpenChange={setShowControls}>
+              <DialogTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-7 w-7">
+                  <IconSettings className="h-4 w-4" stroke={1.5} />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="text-base">Generation parameters</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Temperature</span>
+                      <span className="font-mono tabular-nums">
+                        {genOptions.temperature?.toFixed(2)}
+                      </span>
+                    </div>
+                    <Slider
+                      value={[genOptions.temperature ?? 0.7]}
+                      min={0}
+                      max={2}
+                      step={0.05}
+                      onValueChange={([v]) => setGenOptions((o) => ({ ...o, temperature: v }))}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Top P</span>
+                      <span className="font-mono tabular-nums">{genOptions.topP?.toFixed(2)}</span>
+                    </div>
+                    <Slider
+                      value={[genOptions.topP ?? 0.9]}
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      onValueChange={([v]) => setGenOptions((o) => ({ ...o, topP: v }))}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Top K</span>
+                      <span className="font-mono tabular-nums">{genOptions.topK}</span>
+                    </div>
+                    <Slider
+                      value={[genOptions.topK ?? 40]}
+                      min={0}
+                      max={100}
+                      step={1}
+                      onValueChange={([v]) => setGenOptions((o) => ({ ...o, topK: v }))}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Repeat penalty</span>
+                      <span className="font-mono tabular-nums">
+                        {genOptions.repeatPenalty?.toFixed(2)}
+                      </span>
+                    </div>
+                    <Slider
+                      value={[genOptions.repeatPenalty ?? 1.1]}
+                      min={0}
+                      max={2}
+                      step={0.05}
+                      onValueChange={([v]) => setGenOptions((o) => ({ ...o, repeatPenalty: v }))}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Max tokens</span>
+                      <span className="font-mono tabular-nums">{genOptions.maxTokens}</span>
+                    </div>
+                    <Slider
+                      value={[genOptions.maxTokens ?? 4096]}
+                      min={64}
+                      max={32768}
+                      step={64}
+                      onValueChange={([v]) => setGenOptions((o) => ({ ...o, maxTokens: v }))}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Seed</Label>
+                    <Input
+                      value={seed}
+                      onChange={(e) => setSeed(e.target.value)}
+                      placeholder="Auto"
+                      className="h-8 text-xs font-mono"
+                    />
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+            {messages.length > 0 && !streaming && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1.5 text-xs"
+                onClick={clearMessages}
+              >
+                <IconTrash className="h-3.5 w-3.5" stroke={1.5} />
+                Clear
+              </Button>
+            )}
           </div>
-          <div>{messages.length} msg</div>
         </div>
 
-        {/* Transcript */}
-        <div className="scrollbar-thin flex-1 overflow-y-auto">
-          {messages.length === 0 ? (
-            <div className="grid h-full place-items-center p-8 text-center">
-              <div className="max-w-md">
-                <div className="relative mx-auto mb-4 grid h-14 w-14 place-items-center rounded-md border bg-muted/40">
-                  <IconSparkles className="h-5 w-5 text-primary" stroke={1.75} />
-                  <span className="absolute -bottom-1 -right-1 rounded-sm bg-background px-1 font-mono text-[9px] uppercase text-muted-foreground border">
-                    ai
-                  </span>
+        {/* Chat area */}
+        <ScrollArea ref={scrollRef} className="flex-1" onScroll={handleScroll}>
+          <div className="mx-auto max-w-3xl px-4 py-6">
+            {messages.length === 0 && !streaming ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center">
+                <div className="mb-4 grid h-12 w-12 place-items-center rounded-xl border bg-muted/30">
+                  <IconRobot className="h-6 w-6 text-primary" stroke={1.5} />
                 </div>
-                <div className="font-mono text-sm font-medium">Ask about anything Docker</div>
-                <div className="mt-1 text-sm text-muted-foreground">
-                  Generate stacks, explain compose files, find images.
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Ask about Docker, compose files, or anything else.
+                </p>
+                <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                  <kbd className="rounded border bg-muted/50 px-1.5 py-0.5 text-[10px] font-mono">
+                    Ctrl
+                  </kbd>
+                  <span>+</span>
+                  <kbd className="rounded border bg-muted/50 px-1.5 py-0.5 text-[10px] font-mono">
+                    Enter
+                  </kbd>
+                  <span>to send</span>
                 </div>
-                <div className="mt-6 grid gap-2 sm:grid-cols-2">
-                  {SUGGESTIONS.map((s) => (
-                    <button
-                      key={s.label}
-                      type="button"
-                      onClick={() => send(s.label)}
-                      className="group flex items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-left text-xs transition-colors hover:border-primary/40 hover:bg-accent"
-                    >
-                      <span className="text-base leading-none">{s.icon}</span>
-                      <span className="flex-1 font-mono">{s.label}</span>
-                      <IconArrowRight
-                        className="h-3.5 w-3.5 -translate-x-1 opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100"
-                        stroke={1.75}
-                      />
-                    </button>
-                  ))}
-                </div>
-                {scope !== "workspace" && (
-                  <div className="mt-4">
-                    <Badge variant="outline" className="font-mono text-[10px]">
-                      chat scoped to stack: {scopedStack?.name}
-                    </Badge>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {messages.map((m) => (
+                  <MessageBubble key={m.id} m={m} />
+                ))}
+                {thinking && !streamContent && (
+                  <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                    <IconLoader2 className="h-4 w-4 animate-spin" />
+                    <span>Thinking...</span>
                   </div>
                 )}
+                {streaming && streamContent && (
+                  <MessageBubble
+                    m={{
+                      id: "stream",
+                      role: "assistant",
+                      content: streamContent,
+                      ts: new Date().toISOString(),
+                    }}
+                    isStreaming
+                  />
+                )}
+                <div ref={endRef} />
               </div>
-            </div>
-          ) : (
-            <div className="space-y-6 p-4">
-              {messages.map((m) => (
-                <MessageBubble key={m.id} m={m} onUseYaml={() => navigate({ to: "/yaml" })} />
-              ))}
-              {thinking && (
-                <div className="flex items-start gap-3">
-                  <div className="grid h-7 w-7 place-items-center rounded-md border bg-muted/40">
-                    <IconRobot className="h-3.5 w-3.5" stroke={1.75} />
-                  </div>
-                  <div className="flex items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 font-mono text-xs text-muted-foreground">
-                    <IconLoader2 className="h-3 w-3 animate-spin" />
-                    <span className="animate-pulse">Thinking</span>
-                    <span className="inline-flex gap-0.5">
-                      <span className="h-1 w-1 animate-bounce rounded-full bg-muted-foreground [animation-delay:0ms]" />
-                      <span className="h-1 w-1 animate-bounce rounded-full bg-muted-foreground [animation-delay:120ms]" />
-                      <span className="h-1 w-1 animate-bounce rounded-full bg-muted-foreground [animation-delay:240ms]" />
+            )}
+          </div>
+        </ScrollArea>
+
+        {/* Stats bar */}
+        {(streaming || metrics) && (
+          <div className="border-t bg-muted/20 px-4 py-1.5">
+            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+              {streaming && liveStats && (
+                <>
+                  <span className="tabular-nums">{elapsed}s</span>
+                  <span className="tabular-nums">{liveStats.tokensReceived} tok</span>
+                  {parseFloat(elapsed) > 0 && (
+                    <span className="tabular-nums">
+                      {(liveStats.tokensReceived / parseFloat(elapsed)).toFixed(0)} tok/s
                     </span>
-                  </div>
-                </div>
+                  )}
+                  <span className="ml-auto text-primary/60 animate-pulse">Generating...</span>
+                </>
               )}
-              <div ref={endRef} />
+              {metrics && (
+                <>
+                  <span>Prompt: {metrics.promptEvalCount} tok</span>
+                  <span>Generated: {metrics.evalCount} tok</span>
+                  <span>Total: {metrics.promptEvalCount + metrics.evalCount} tok</span>
+                  <span className="text-muted-foreground/30">|</span>
+                  {metrics.evalDuration > 0 && (
+                    <span>
+                      {(metrics.evalCount / (metrics.evalDuration / 1_000_000_000)).toFixed(0)}{" "}
+                      tok/s
+                    </span>
+                  )}
+                  <span>{formatDuration(metrics.totalDuration)}</span>
+                </>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Composer */}
-        <div className="border-t bg-muted/20 p-3">
-          {/* Presets */}
-          <div className="mb-2 flex flex-wrap gap-1">
-            {PRESETS.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => send(p.prompt)}
-                disabled={thinking || enabledModels.length === 0}
-                className="flex items-center gap-1 rounded-md border bg-background px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground transition-colors hover:border-primary/40 hover:bg-accent hover:text-foreground disabled:opacity-50"
-              >
-                <IconWand className="h-3 w-3" stroke={1.75} /> {p.label}
-              </button>
-            ))}
-          </div>
+        <div className="border-t p-4">
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              send(prompt);
+              const text = promptRef.current;
+              if (text.trim()) sendStream(text);
             }}
-            className="relative rounded-md border bg-background focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 transition-colors"
+            className="relative rounded-xl border bg-background shadow-sm transition-shadow focus-within:shadow-md focus-within:border-primary/40"
           >
             <Textarea
               ref={textareaRef}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder={
-                enabledModels.length === 0
-                  ? "Enable a model in Settings to chat…"
-                  : "Ask for a stack, image, or explanation…"
-              }
-              rows={2}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  send(prompt);
-                }
-              }}
-              className="min-h-[72px] resize-none border-0 bg-transparent pr-14 font-mono text-sm shadow-none focus-visible:ring-0"
-              disabled={enabledModels.length === 0}
+              onKeyDown={handleKeyDown}
+              placeholder={!model ? "Select a model to start chatting…" : "Message AI Studio..."}
+              rows={1}
+              className="min-h-[52px] resize-none border-0 bg-transparent px-4 py-3.5 pr-20 text-sm shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/50"
+              disabled={!model}
             />
-            <div className="flex items-center justify-between border-t px-2 py-1.5">
-              <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                <IconBolt className="h-3 w-3" stroke={1.75} />
-                <span>{activeModel?.name ?? "select model"}</span>
-                <span className="text-muted-foreground/40">·</span>
-                <kbd className="rounded-sm border bg-muted/50 px-1 py-px text-[9px]">⇧⏎</kbd>
-                <span>newline</span>
-              </div>
+            <div className="absolute bottom-2 right-2 flex items-center gap-1">
+              {prompt.trim() && !thinking && (
+                <span className="text-[10px] text-muted-foreground/40 hidden sm:block">
+                  Ctrl+Enter
+                </span>
+              )}
               <Button
                 type="submit"
                 size="sm"
-                className="h-7 rounded-md px-2"
-                disabled={!prompt.trim() || thinking || enabledModels.length === 0}
+                className="h-8 w-8 rounded-lg p-0"
+                disabled={!prompt.trim() || thinking || !model}
               >
                 {thinking ? (
-                  <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
+                  <IconLoader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <>
-                    <IconSend className="mr-1 h-3.5 w-3.5" stroke={1.75} />
-                    <span className="font-mono text-[11px]">Send</span>
-                    <IconCornerDownLeft className="ml-1 h-3 w-3 opacity-60" stroke={1.75} />
-                  </>
+                  <IconSend className="h-4 w-4" stroke={1.5} />
                 )}
               </Button>
             </div>
@@ -347,131 +767,89 @@ function AIPage() {
   );
 }
 
-function MessageBubble({ m, onUseYaml }: { m: ChatMessage; onUseYaml: () => void }) {
+function MessageBubble({ m, isStreaming }: { m: ChatMessage; isStreaming?: boolean }) {
   const isUser = m.role === "user";
-  const time = new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    await navigator.clipboard.writeText(m.content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
-    <div className={cn("flex gap-3", isUser && "flex-row-reverse")}>
+    <div className={cn("flex gap-4", isUser ? "flex-row-reverse" : "flex-row")}>
       <div
         className={cn(
-          "grid h-7 w-7 shrink-0 place-items-center rounded-md border",
-          isUser ? "bg-primary/10 border-primary/30" : "bg-muted/40",
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs",
+          isUser ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
         )}
       >
         {isUser ? (
-          <IconUser className="h-3.5 w-3.5" stroke={1.75} />
+          <IconUser className="h-4 w-4" stroke={1.5} />
         ) : (
-          <IconRobot className="h-3.5 w-3.5 text-primary" stroke={1.75} />
+          <IconRobot className="h-4 w-4" stroke={1.5} />
         )}
       </div>
-      <div className={cn("flex max-w-[85%] flex-col gap-1.5", isUser && "items-end")}>
-        <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          <span>{isUser ? "you" : "assistant"}</span>
-          <span className="text-muted-foreground/40">·</span>
-          <span>{time}</span>
-        </div>
+      <div
+        className={cn("group relative min-w-0 max-w-[75%]", isUser ? "items-end" : "items-start")}
+      >
         {isUser ? (
-          <div className="rounded-md bg-primary px-3.5 py-2 text-sm text-primary-foreground">
+          <div className="rounded-2xl bg-primary px-4 py-2.5 text-sm text-primary-foreground">
             {m.content}
           </div>
         ) : (
-          <div className="prose prose-sm dark:prose-invert max-w-none rounded-md text-sm text-foreground [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[12px] [&_p]:my-0 [&_ul]:my-1 [&_ul]:pl-4 [&_strong]:font-semibold">
-            <ReactMarkdown>{m.content}</ReactMarkdown>
+          <div className="prose prose-sm dark:prose-invert max-w-none rounded-2xl bg-muted/30 px-4 py-2.5 text-sm [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-xs [&_p]:my-0 [&_ul]:my-1 [&_ul]:pl-4 [&_pre]:relative [&_pre]:bg-[#0b0f19] [&_pre]:text-[#e2e8f0] [&_pre]:rounded-xl [&_pre]:p-4 [&_pre]:my-2 [&_pre]:text-xs [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-xs">
+            <ReactMarkdown
+              components={{
+                code({ className, children, ...props }) {
+                  const match = /language-(\w+)/.exec(className ?? "");
+                  const isInline = !match && !className?.includes("language-");
+                  if (isInline)
+                    return (
+                      <code className={className} {...props}>
+                        {children}
+                      </code>
+                    );
+                  return (
+                    <div className="relative group/pre">
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(String(children).replace(/\n$/, ""));
+                          toast.success("Code copied");
+                        }}
+                        className="absolute right-2 top-2 rounded-md bg-white/10 px-2 py-1 text-[10px] text-white/60 opacity-0 group-hover/pre:opacity-100 transition-opacity hover:bg-white/20 hover:text-white"
+                      >
+                        <IconCopy className="h-3.5 w-3.5 inline" stroke={1.5} />
+                      </button>
+                      <code className={className} {...props}>
+                        {children}
+                      </code>
+                    </div>
+                  );
+                },
+              }}
+            >
+              {m.content}
+            </ReactMarkdown>
           </div>
         )}
-        {m.yaml && <YamlBlock yaml={m.yaml} onUse={onUseYaml} />}
-      </div>
-    </div>
-  );
-}
-
-function YamlBlock({ yaml, onUse }: { yaml: string; onUse: () => void }) {
-  const lines = yaml.split("\n");
-  const copy = async () => {
-    await navigator.clipboard.writeText(yaml);
-    toast.success("YAML copied");
-  };
-  return (
-    <div className="w-full overflow-hidden rounded-md border bg-[#0b0f19] text-left text-[#e2e8f0]">
-      <div className="flex items-center justify-between border-b border-white/10 bg-white/[0.02] px-3 py-1.5">
-        <div className="flex items-center gap-2">
-          <div className="flex gap-1">
-            <span className="h-2 w-2 rounded-full bg-red-400/70" />
-            <span className="h-2 w-2 rounded-full bg-amber-400/70" />
-            <span className="h-2 w-2 rounded-full bg-emerald-400/70" />
-          </div>
-          <div className="font-mono text-[10px] uppercase tracking-widest text-white/50">
-            docker-compose.yml
-          </div>
-        </div>
-        <div className="flex items-center gap-1">
+        {!isUser && !isStreaming && (
           <button
-            type="button"
             onClick={copy}
-            className="flex items-center gap-1 rounded-md px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+            className="absolute -bottom-5 right-0 rounded-md px-1.5 py-0.5 text-[10px] text-muted-foreground/40 opacity-0 group-hover:opacity-100 hover:text-foreground transition-opacity"
           >
-            <IconCopy className="h-3 w-3" stroke={1.75} /> Copy
+            {copied ? "Copied!" : <IconCopy className="h-3.5 w-3.5" stroke={1.5} />}
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              toast.success("Opened in YAML Explorer");
-              onUse();
-            }}
-            className="flex items-center gap-1 rounded-md bg-primary/90 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary"
-          >
-            Use this <IconArrowRight className="h-3 w-3" stroke={1.75} />
-          </button>
-        </div>
+        )}
       </div>
-      <pre className="scrollbar-thin max-h-72 overflow-auto p-3 font-mono text-[12px] leading-6">
-        {lines.map((l, i) => (
-          <div key={i} className="flex">
-            <span className="mr-3 w-6 shrink-0 select-none text-right text-white/25 tabular-nums">
-              {i + 1}
-            </span>
-            <span className="whitespace-pre">{colorYaml(l)}</span>
-          </div>
-        ))}
-      </pre>
     </div>
   );
 }
 
-function colorYaml(line: string) {
-  if (/^\s*#/.test(line)) return <span className="text-white/40 italic">{line || " "}</span>;
-  const m = line.match(/^(\s*)([-]\s+)?([A-Za-z0-9_.\-]+)(:)(\s*)(.*)$/);
-  if (m) {
-    const [, indent, dash, key, colon, gap, rest] = m;
-    return (
-      <>
-        <span>{indent}</span>
-        {dash && <span className="text-fuchsia-300">{dash}</span>}
-        <span className="text-sky-300">{key}</span>
-        <span className="text-white/50">{colon}</span>
-        <span>{gap}</span>
-        {colorYamlValue(rest)}
-      </>
-    );
-  }
-  const dash = line.match(/^(\s*)(-\s+)(.*)$/);
-  if (dash) {
-    return (
-      <>
-        <span>{dash[1]}</span>
-        <span className="text-fuchsia-300">{dash[2]}</span>
-        {colorYamlValue(dash[3])}
-      </>
-    );
-  }
-  return <span>{line || " "}</span>;
-}
-
-function colorYamlValue(v: string) {
-  if (!v) return null;
-  if (/^["'].*["']$/.test(v)) return <span className="text-emerald-300">{v}</span>;
-  if (/^(true|false|null|~)$/.test(v)) return <span className="text-amber-300">{v}</span>;
-  if (/^-?\d+(\.\d+)?$/.test(v)) return <span className="text-amber-300">{v}</span>;
-  return <span className="text-white/90">{v}</span>;
+function formatSize(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
 }

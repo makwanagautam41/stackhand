@@ -8,6 +8,10 @@ import type {
   OllamaChatResponse,
   GenerateStackResponse,
   RegistryImage,
+  OllamaModelInfo,
+  OllamaVersion,
+  OllamaChatOptions,
+  OllamaFullChatResponse,
 } from "./types";
 import type { DockerStatus, YamlFile } from "./types";
 
@@ -410,14 +414,43 @@ export const api = {
     return request<OllamaStatus>("/ollama/status");
   },
 
+  async ollamaVersion() {
+    return request<OllamaVersion>("/ollama/version");
+  },
+
   async ollamaModels() {
     return request<{ id: string; name: string; size: number; modifiedAt: string }[]>("/ollama/models");
   },
 
-  async ollamaChat(model: string, messages: { role: string; content: string }[]) {
-    return request<OllamaChatResponse>("/ollama/chat", {
+  async ollamaModelInfo(name: string) {
+    return request<OllamaModelInfo>(`/ollama/model/${encodeURIComponent(name)}`);
+  },
+
+  async ollamaChat(
+    model: string,
+    messages: { role: string; content: string }[],
+    options?: OllamaChatOptions,
+  ) {
+    return request<OllamaFullChatResponse>("/ollama/chat", {
       method: "POST",
-      body: JSON.stringify({ model, messages }),
+      body: JSON.stringify({ model, messages, options }),
+    });
+  },
+
+  ollamaChatStreamUrl() {
+    return `${getApiBase()}/ollama/chat/stream`;
+  },
+
+  async ollamaPull(name: string) {
+    return request<{ status: string }>("/ollama/pull", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+  },
+
+  async ollamaDeleteModel(name: string) {
+    return request<{ deleted: boolean }>(`/ollama/model/${encodeURIComponent(name)}`, {
+      method: "DELETE",
     });
   },
 

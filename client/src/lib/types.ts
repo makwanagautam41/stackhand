@@ -243,3 +243,45 @@ export interface GenerateStackResponse {
   explanation: string;
   image?: string;
 }
+
+export interface OllamaModelInfo {
+  name: string;
+  family: string;
+  parameterSize: string;
+  quantization: string;
+  size: number;
+  contextLength: number;
+  modifiedAt: string;
+  digest: string;
+  license: string;
+  supportsVision: boolean;
+  supportsTools: boolean;
+  supportsEmbedding: boolean;
+}
+
+export interface OllamaVersion {
+  version: string | null;
+  error?: string;
+}
+
+export interface OllamaChatOptions {
+  temperature?: number;
+  topP?: number;
+  topK?: number;
+  repeatPenalty?: number;
+  seed?: number;
+  maxTokens?: number;
+}
+
+export interface OllamaMetrics {
+  promptEvalCount: number;
+  evalCount: number;
+  totalDuration: number;
+  loadDuration: number;
+  promptEvalDuration: number;
+  evalDuration: number;
+}
+
+export interface OllamaFullChatResponse extends OllamaChatResponse {
+  metrics?: OllamaMetrics;
+}
