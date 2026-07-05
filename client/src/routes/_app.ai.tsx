@@ -501,7 +501,7 @@ function AIPage() {
   const canSend = (prompt.trim().length > 0 || attachments.length > 0) && !thinking && !!model;
 
   return (
-    <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
+    <div className="flex min-h-0 flex-1 gap-3 overflow-hidden" style={{ maxHeight: "calc(100vh - 8rem)" }}>
       {/* Sidebar */}
       {sidebarOpen && (
         <div className="flex w-56 shrink-0 flex-col overflow-hidden rounded-lg border bg-card">
