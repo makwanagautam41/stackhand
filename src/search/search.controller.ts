@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SearchService } from './search.service';
 
@@ -20,6 +20,13 @@ export class SearchController {
   @ApiOperation({ summary: 'Get search history logs' })
   async logs(@Query('engine') engine?: string, @Query('limit') limit?: string) {
     return this.service.searchLogs(engine, Math.min(parseInt(limit ?? '20', 10), 100));
+  }
+
+  @Delete('logs/:id')
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Delete a search log entry' })
+  async deleteLog(@Param('id') id: string) {
+    await this.service.deleteSearchLog(id);
   }
 
   @Post('web')

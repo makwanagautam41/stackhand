@@ -1145,6 +1145,7 @@ function AIPage() {
                   onWebSearchToggle={setWebSearchEnabled}
                   searchEngine={searchEngine}
                   onSearchEngineChange={setSearchEngine}
+                  onFillQuery={setPrompt}
                 />
                 {webSearchEnabled && (
                   <div className="flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary border border-primary/20">

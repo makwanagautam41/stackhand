@@ -101,6 +101,10 @@ export class SearchService {
     });
   }
 
+  async deleteSearchLog(id: string) {
+    await this.prisma.searchLog.delete({ where: { id } });
+  }
+
   private defaultEngine(): EngineName {
     if (this.engines.tavily.key) return 'tavily';
     if (this.engines.brave.key) return 'brave';

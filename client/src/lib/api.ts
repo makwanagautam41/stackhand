@@ -489,6 +489,10 @@ export const api = {
     return request<SearchLog[]>(`/search/logs?${params}`);
   },
 
+  async webSearchDeleteLog(id: string) {
+    return request<void>(`/search/logs/${id}`, { method: "DELETE" });
+  },
+
   // ---- AI Sessions ----
   async listAiSessions(workspaceId: string) {
     return request<AiSession[]>(`/ai-sessions?workspaceId=${encodeURIComponent(workspaceId)}`);
