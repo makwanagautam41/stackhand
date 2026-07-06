@@ -311,3 +311,13 @@ export interface WebSearchResult {
   snippet: string;
   url: string;
 }
+
+export interface SearchEngineStatus {
+  configured: boolean;
+  requests: number;
+}
+
+export interface SearchStatus {
+  engines: Record<string, SearchEngineStatus>;
+  totalRequests: number;
+}

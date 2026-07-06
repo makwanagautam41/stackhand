@@ -15,6 +15,7 @@ import type {
   AiSession,
   AiMessage,
   WebSearchResult,
+  SearchStatus,
 } from "./types";
 import type { DockerStatus, YamlFile } from "./types";
 
@@ -469,11 +470,15 @@ export const api = {
   },
 
   // ---- Web Search ----
-  async webSearch(query: string, maxResults?: number) {
+  async webSearch(query: string, maxResults?: number, engine?: string) {
     return request<{ results: WebSearchResult[] }>("/search/web", {
       method: "POST",
-      body: JSON.stringify({ query, maxResults }),
+      body: JSON.stringify({ query, maxResults, engine }),
     });
+  },
+
+  async webSearchStatus() {
+    return request<SearchStatus>("/search/status");
   },
 
   // ---- AI Sessions ----

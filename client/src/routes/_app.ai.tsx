@@ -218,6 +218,18 @@ function AIPage() {
     webSearchEnabledRef.current = webSearchEnabled;
   }, [webSearchEnabled]);
 
+  const [searchEngine, setSearchEngine] = useState(() => {
+    try { return localStorage.getItem("stackhand-search-engine") || "google"; }
+    catch { return "google"; }
+  });
+  const searchEngineRef = useRef(searchEngine);
+
+  useEffect(() => {
+    searchEngineRef.current = searchEngine;
+    try { localStorage.setItem("stackhand-search-engine", searchEngine); }
+    catch {}
+  }, [searchEngine]);
+
   const loadSessions = useCallback(async () => {
     if (!current?.id) return;
     setSessionsLoading(true);
@@ -560,10 +572,10 @@ function AIPage() {
       if (webSearchEnabledRef.current && searchQuery) {
         try {
           setThinking(true);
-          const searchRes = await api.webSearch(searchQuery, 5);
+          const searchRes = await api.webSearch(searchQuery, 5, searchEngineRef.current);
           if (searchRes.results && searchRes.results.length > 0) {
             const contextMsg = formatWebSearchContext(searchRes.results, searchQuery);
-            allMessages.unshift({ role: "system", content: contextMsg });
+            allMessages.splice(allMessages.length - 1, 0, { role: "system", content: contextMsg });
           }
         } catch (e) {
           console.error("Web search failed:", e);
@@ -1131,6 +1143,8 @@ function AIPage() {
                 <ChatInputTools
                   webSearchEnabled={webSearchEnabled}
                   onWebSearchToggle={setWebSearchEnabled}
+                  searchEngine={searchEngine}
+                  onSearchEngineChange={setSearchEngine}
                 />
                 {webSearchEnabled && (
                   <div className="flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary border border-primary/20">
