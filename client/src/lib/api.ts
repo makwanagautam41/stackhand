@@ -16,6 +16,7 @@ import type {
   AiMessage,
   WebSearchResult,
   SearchStatus,
+  SearchLog,
 } from "./types";
 import type { DockerStatus, YamlFile } from "./types";
 
@@ -479,6 +480,13 @@ export const api = {
 
   async webSearchStatus() {
     return request<SearchStatus>("/search/status");
+  },
+
+  async webSearchLogs(engine?: string, limit = 20) {
+    const params = new URLSearchParams();
+    if (engine) params.set("engine", engine);
+    params.set("limit", String(limit));
+    return request<SearchLog[]>(`/search/logs?${params}`);
   },
 
   // ---- AI Sessions ----

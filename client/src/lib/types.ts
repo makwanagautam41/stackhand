@@ -321,3 +321,11 @@ export interface SearchStatus {
   engines: Record<string, SearchEngineStatus>;
   totalRequests: number;
 }
+
+export interface SearchLog {
+  id: string;
+  query: string;
+  engine: string;
+  results: number;
+  createdAt: string;
+}

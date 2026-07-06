@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { IconPlus, IconWorld, IconSearch } from "@tabler/icons-react";
+import { IconPlus, IconWorld, IconSearch, IconCode, IconFileText, IconTerminal2, IconBrain } from "@tabler/icons-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { api } from "@/lib/api";
-import type { SearchStatus } from "@/lib/types";
+import type { SearchStatus, SearchLog } from "@/lib/types";
 
 interface ChatInputToolsProps {
   webSearchEnabled: boolean;
@@ -19,6 +19,13 @@ interface ChatInputToolsProps {
   onSearchEngineChange: (engine: string) => void;
 }
 
+const PLACEHOLDER_TOOLS = [
+  { icon: IconCode, label: "Generate Code", desc: "Write code from description" },
+  { icon: IconFileText, label: "Summarize", desc: "Summarize selected text" },
+  { icon: IconTerminal2, label: "Run Command", desc: "Execute a terminal command" },
+  { icon: IconBrain, label: "Explain", desc: "Explain complex concepts" },
+];
+
 export function ChatInputTools({
   webSearchEnabled,
   onWebSearchToggle,
@@ -26,12 +33,14 @@ export function ChatInputTools({
   onSearchEngineChange,
 }: ChatInputToolsProps) {
   const [status, setStatus] = useState<SearchStatus | null>(null);
+  const [logs, setLogs] = useState<SearchLog[]>([]);
 
   useEffect(() => {
     if (webSearchEnabled) {
       api.webSearchStatus().then(setStatus).catch(() => {});
+      api.webSearchLogs(searchEngine, 5).then(setLogs).catch(() => {});
     }
-  }, [webSearchEnabled]);
+  }, [webSearchEnabled, searchEngine]);
 
   const engines = status?.engines ?? {};
   const configuredEngines = Object.entries(engines).filter(([_, e]) => e.configured);
@@ -46,7 +55,7 @@ export function ChatInputTools({
           <IconPlus className="h-4.5 w-4.5" stroke={1.5} />
         </button>
       </PopoverTrigger>
-      <PopoverContent side="top" align="start" sideOffset={8} className="w-64 p-2">
+      <PopoverContent side="top" align="start" sideOffset={8} className="w-72 p-2">
         <div className="space-y-1">
           <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">Tools</div>
 
@@ -95,8 +104,40 @@ export function ChatInputTools({
                   </div>
                 )}
               </div>
+
+              {logs.length > 0 && (
+                <div className="border-t border-border/50 px-2 py-1.5">
+                  <div className="text-[11px] font-medium text-muted-foreground mb-1">Recent Searches</div>
+                  <div className="space-y-1 max-h-24 overflow-y-auto">
+                    {logs.map((log) => (
+                      <div key={log.id} className="flex items-center justify-between text-[11px]">
+                        <span className="truncate max-w-[160px]">{log.query}</span>
+                        <span className="text-muted-foreground/60 shrink-0 ml-2">{log.results} results</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           )}
+
+          <div className="border-t border-border/50 pt-1.5">
+            <div className="px-2 py-1 text-xs font-medium text-muted-foreground">Quick Actions</div>
+            {PLACEHOLDER_TOOLS.map((tool) => (
+              <button
+                key={tool.label}
+                type="button"
+                disabled
+                className="flex w-full items-center gap-3 rounded-lg px-2 py-2 opacity-50 cursor-not-allowed"
+              >
+                <tool.icon className="h-5 w-5 shrink-0 text-muted-foreground" stroke={1.5} />
+                <div className="flex min-w-0 flex-1 flex-col items-start text-left">
+                  <span className="text-sm font-medium">{tool.label}</span>
+                  <span className="text-[11px] text-muted-foreground">{tool.desc}</span>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
       </PopoverContent>
     </Popover>

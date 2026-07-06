@@ -152,6 +152,14 @@ model AiMessage {
   session   AiSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 }
 
+model SearchLog {
+  id        String   @id @default(uuid())
+  query     String
+  engine    String
+  results   Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
 model YamlBackup {
   id        String   @id @default(uuid())
   filePath  String
