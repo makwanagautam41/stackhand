@@ -12,6 +12,8 @@ import type {
   OllamaVersion,
   OllamaChatOptions,
   OllamaFullChatResponse,
+  AiSession,
+  AiMessage,
 } from "./types";
 import type { DockerStatus, YamlFile } from "./types";
 
@@ -462,6 +464,47 @@ export const api = {
     return request<GenerateStackResponse>("/ollama/generate-stack", {
       method: "POST",
       body: JSON.stringify({ description }),
+    });
+  },
+
+  // ---- AI Sessions ----
+  async listAiSessions(workspaceId: string) {
+    return request<AiSession[]>(`/ai-sessions?workspaceId=${encodeURIComponent(workspaceId)}`);
+  },
+
+  async getAiSession(id: string) {
+    return request<AiSession>(`/ai-sessions/${id}`);
+  },
+
+  async createAiSession(data: { workspaceId: string; name: string; model?: string }) {
+    return request<AiSession>("/ai-sessions", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async updateAiSession(id: string, data: { name?: string; model?: string }) {
+    return request<AiSession>(`/ai-sessions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async deleteAiSession(id: string) {
+    return request<void>(`/ai-sessions/${id}`, { method: "DELETE" });
+  },
+
+  async addAiMessage(sessionId: string, data: { role: string; content: string }) {
+    return request<AiMessage>(`/ai-sessions/${sessionId}/messages`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async updateAiMessage(sessionId: string, messageId: string, content: string) {
+    return request<AiMessage>(`/ai-sessions/${sessionId}/messages/${messageId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ content }),
     });
   },
 

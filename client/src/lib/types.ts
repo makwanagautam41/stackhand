@@ -285,3 +285,23 @@ export interface OllamaMetrics {
 export interface OllamaFullChatResponse extends OllamaChatResponse {
   metrics?: OllamaMetrics;
 }
+
+export interface AiSession {
+  id: string;
+  name: string;
+  model: string;
+  options: string;
+  createdAt: string;
+  updatedAt: string;
+  workspaceId: string;
+  _count?: { messages: number };
+  messages?: AiMessage[];
+}
+
+export interface AiMessage {
+  id: string;
+  role: string;
+  content: string;
+  createdAt: string;
+  sessionId: string;
+}

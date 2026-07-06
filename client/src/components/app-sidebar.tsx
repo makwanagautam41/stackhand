@@ -129,7 +129,7 @@ export function AppSidebar() {
               Development
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-wider text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+            <span className="inline-flex items-center gap-1.5 rounded-xs bg-emerald-100 px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-wider text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
               production
             </span>

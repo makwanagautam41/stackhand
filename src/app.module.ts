@@ -17,6 +17,7 @@ import { BackupModule } from './backup/backup.module';
 import { VolumeModule } from './volume/volume.module';
 import { RegistryModule } from './registry/registry.module';
 import { DatabaseModule } from './database/database.module';
+import { AiSessionModule } from './ai-session/ai-session.module';
 import { StackGateway } from './gateway/stack.gateway';
 import { HealthController } from './health.controller';
 import { APP_FILTER } from '@nestjs/core';
@@ -46,6 +47,7 @@ import { CommonModule } from './common/common.module';
     VolumeModule,
     RegistryModule,
     DatabaseModule,
+    AiSessionModule,
     CommonModule,
   ],
   controllers: [HealthController],

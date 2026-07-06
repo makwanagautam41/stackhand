@@ -23,6 +23,7 @@ model Workspace {
   envFiles EnvFile[]
   chats    ChatMessage[]
   backedUpFiles YamlBackup[]
+  aiSessions  AiSession[]
 }
 
 model Stack {
@@ -126,6 +127,29 @@ model Activity {
 model Setting {
   id    String @id
   value String @default("{}")
+}
+
+model AiSession {
+  id        String   @id @default(uuid())
+  name      String
+  model     String   @default("")
+  options   String   @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaceId String
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  messages    AiMessage[]
+}
+
+model AiMessage {
+  id        String   @id @default(uuid())
+  role      String
+  content   String
+  createdAt DateTime @default(now())
+
+  sessionId String
+  session   AiSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 }
 
 model YamlBackup {

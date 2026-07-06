@@ -47,7 +47,7 @@ import type {
   OllamaChatOptions,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { api } from "@/lib/api";
+import { api, getStoredToken } from "@/lib/api";
 
 export const Route = createFileRoute("/_app/ai")({
   component: AIPage,
@@ -75,7 +75,11 @@ interface PastedAttachment {
   content: string;
 }
 
-const STORAGE_KEY = "stackhand-ai-studio";
+const STORAGE_KEY_PREFIX = "stackhand-ai-studio";
+
+function getStorageKey(wsId: string | null | undefined) {
+  return wsId ? `${STORAGE_KEY_PREFIX}-${wsId}` : STORAGE_KEY_PREFIX;
+}
 
 // Anything bigger than this gets pulled out of the textarea and turned into
 // a "pasted content" chip instead of being dumped inline (same idea as
@@ -100,6 +104,9 @@ function AIPage() {
   const sendingRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const promptRef = useRef(prompt);
+  const streamMsgIdRef = useRef<string | null>(null);
+  const streamSessionIdRef = useRef<string | null>(null);
+  const saveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ---- Pasted-content attachments ----
   const [attachments, setAttachments] = useState<PastedAttachment[]>([]);
@@ -157,26 +164,10 @@ function AIPage() {
     return text.trim() ? `${blocks}\n\n${text}` : blocks;
   }, []);
 
-  const restore = useCallback(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const data = JSON.parse(saved);
-        const sessions = Array.isArray(data.sessions) ? data.sessions : [];
-        const currentId = sessions.some((s: ChatSession) => s.id === data.currentId)
-          ? data.currentId
-          : (sessions[0]?.id ?? null);
-        return { sessions, currentId, model: typeof data.model === "string" ? data.model : "" };
-      }
-    } catch {}
-    return { sessions: [], currentId: null, model: "" };
-  }, []);
-
-  const [sessions, setSessions] = useState<ChatSession[]>(() => restore().sessions);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(
-    () => restore().currentId,
-  );
-  const [model, setModel] = useState<string>(() => restore().model);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [model, setModel] = useState<string>("");
+  const [sessionsLoading, setSessionsLoading] = useState(true);
   const currentSessionIdRef = useRef(currentSessionId);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showControls, setShowControls] = useState(false);
@@ -198,13 +189,95 @@ function AIPage() {
 
   const currentSession = sessions.find((s) => s.id === currentSessionId);
   const messages = currentSession?.messages ?? [];
+  const streamContentRef = useRef(streamContent);
 
   useEffect(() => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ sessions, currentId: currentSessionId, model }),
-    );
-  }, [sessions, currentSessionId, model]);
+    streamContentRef.current = streamContent;
+  }, [streamContent]);
+
+  const loadSessions = useCallback(async () => {
+    if (!current?.id) return;
+    setSessionsLoading(true);
+    try {
+      // Migrate old localStorage sessions to backend if they exist
+      const oldKey = getStorageKey(current.id);
+      const raw = localStorage.getItem(oldKey);
+      if (raw) {
+        try {
+          const data = JSON.parse(raw);
+          if (Array.isArray(data.sessions) && data.sessions.length > 0) {
+            const existing = await api.listAiSessions(current.id);
+            if (existing.length === 0) {
+              for (const s of data.sessions) {
+                const created = await api.createAiSession({
+                  workspaceId: current.id,
+                  name: s.name,
+                  model: data.model ?? "",
+                });
+                for (const m of s.messages ?? []) {
+                  await api.addAiMessage(created.id, { role: m.role, content: m.content });
+                }
+              }
+            }
+          }
+        } catch {}
+        localStorage.removeItem(oldKey);
+      }
+
+      const remote = await api.listAiSessions(current.id);
+      const mapped: ChatSession[] = await Promise.all(
+        remote.map(async (s) => {
+          let messages: ChatMessage[] = [];
+          if (s.messages) {
+            messages = s.messages.map((m) => ({
+              id: m.id,
+              role: m.role as "user" | "assistant",
+              content: m.content,
+              ts: m.createdAt,
+            }));
+          } else {
+            const full = await api.getAiSession(s.id);
+            messages = (full.messages ?? []).map((m) => ({
+              id: m.id,
+              role: m.role as "user" | "assistant",
+              content: m.content,
+              ts: m.createdAt,
+            }));
+          }
+          return { id: s.id, name: s.name, messages, createdAt: s.createdAt };
+        }),
+      );
+      setSessions(mapped);
+      setCurrentSessionId((prev) => {
+        if (prev && mapped.some((s) => s.id === prev)) return prev;
+        return mapped[0]?.id ?? null;
+      });
+    } catch {
+      toast.error("Failed to load AI sessions");
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, [current?.id]);
+
+  useEffect(() => {
+    setCurrentSessionId(null);
+    loadSessions();
+  }, [loadSessions]);
+
+  // Save any in-progress stream content when navigating away
+  useEffect(() => {
+    return () => {
+      const sessionId = streamSessionIdRef.current;
+      const msgId = streamMsgIdRef.current;
+      const content = streamContentRef.current;
+      if (sessionId && msgId && content) {
+        api.updateAiMessage(sessionId, msgId, content).catch(() => {});
+      }
+      if (saveIntervalRef.current) {
+        clearInterval(saveIntervalRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     promptRef.current = prompt;
@@ -267,20 +340,32 @@ function AIPage() {
     } else setModelInfo(null);
   }, [model, ollamaConnected]);
 
-  const createSession = useCallback(() => {
-    const id = crypto.randomUUID();
-    const session: ChatSession = {
-      id,
+  const createSession = useCallback(async () => {
+    if (!current?.id) return null;
+    let session: ChatSession = {
+      id: crypto.randomUUID(),
       name: "New chat",
       messages: [],
       createdAt: new Date().toISOString(),
     };
+    try {
+      const created = await api.createAiSession({
+        workspaceId: current.id,
+        name: "New chat",
+        model,
+      });
+      session = { ...session, id: created.id, createdAt: created.createdAt };
+    } catch {
+      toast.error("Failed to create session");
+      return null;
+    }
     setSessions((prev) => [...prev, session]);
-    setCurrentSessionId(id);
-    return id;
-  }, []);
+    setCurrentSessionId(session.id);
+    return session.id;
+  }, [current?.id, model]);
 
   const deleteSession = useCallback((id: string) => {
+    api.deleteAiSession(id).catch(() => toast.error("Failed to delete session"));
     setSessions((prev) => {
       const next = prev.filter((s) => s.id !== id);
       if (currentSessionIdRef.current === id) setCurrentSessionId(next[0]?.id ?? null);
@@ -289,8 +374,8 @@ function AIPage() {
   }, []);
 
   useEffect(() => {
-    if (sessions.length === 0) createSession();
-  }, [sessions.length, createSession]);
+    if (!sessionsLoading && sessions.length === 0) createSession();
+  }, [sessions.length, createSession, sessionsLoading]);
 
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -305,6 +390,7 @@ function AIPage() {
       const name = window.prompt("Rename chat", session.name);
       if (name && name.trim()) {
         setSessions((prev) => prev.map((s) => (s.id === id ? { ...s, name: name.trim() } : s)));
+        api.updateAiSession(id, { name: name.trim() }).catch(() => {});
       }
     },
     [sessions],
@@ -350,9 +436,19 @@ function AIPage() {
       abortRef.current.abort();
       abortRef.current = null;
     }
+    if (saveIntervalRef.current) {
+      clearInterval(saveIntervalRef.current);
+      saveIntervalRef.current = null;
+    }
     setThinking(false);
     setStreaming(false);
-    if (streamContent && sessionId) {
+    const partialContent = streamContentRef.current;
+    if (partialContent && sessionId) {
+      const finalContent = partialContent;
+      const msgId = streamMsgIdRef.current;
+      if (msgId) {
+        api.updateAiMessage(sessionId, msgId, finalContent).catch(() => {});
+      }
       setSessions((prev) =>
         prev.map((s) =>
           s.id === sessionId
@@ -361,9 +457,9 @@ function AIPage() {
                 messages: [
                   ...s.messages,
                   {
-                    id: crypto.randomUUID(),
+                    id: msgId ?? crypto.randomUUID(),
                     role: "assistant",
-                    content: streamContent + "\n\n*[stopped]*",
+                    content: finalContent,
                     ts: new Date().toISOString(),
                   },
                 ],
@@ -374,7 +470,9 @@ function AIPage() {
     }
     setStreamContent("");
     setLiveStats(null);
-  }, [streamContent]);
+    streamMsgIdRef.current = null;
+    streamSessionIdRef.current = null;
+  }, []);
 
   const sendStream = async (text: string) => {
     if (sendingRef.current || !text.trim() || !model) return;
@@ -383,18 +481,24 @@ function AIPage() {
     try {
       let sessionId = currentSessionIdRef.current;
       if (!sessionId) {
-        const id = crypto.randomUUID();
+        if (!current?.id) return;
+        const created = await api.createAiSession({
+          workspaceId: current.id,
+          name: "New chat",
+          model,
+        });
+        sessionId = created.id;
         const session: ChatSession = {
-          id,
+          id: created.id,
           name: "New chat",
           messages: [],
-          createdAt: new Date().toISOString(),
+          createdAt: created.createdAt,
         };
         setSessions((prev) => [...prev, session]);
-        setCurrentSessionId(id);
-        currentSessionIdRef.current = id;
-        sessionId = id;
+        setCurrentSessionId(created.id);
+        currentSessionIdRef.current = created.id;
       }
+      streamSessionIdRef.current = sessionId;
 
       const existing = sessions.find((s) => s.id === sessionId);
       const sessionMessages = existing?.messages ?? [];
@@ -409,7 +513,12 @@ function AIPage() {
       setSessions((prev) =>
         prev.map((s) => (s.id === sessionId ? { ...s, messages: [...s.messages, userMsg] } : s)),
       );
-      if (isFirst) updateSessionName(sessionId, text);
+      api.addAiMessage(sessionId, { role: "user", content: text.trim() }).catch(() => {});
+      if (isFirst) {
+        const name = text.trim().slice(0, 40).split("\n")[0];
+        api.updateAiSession(sessionId, { name }).catch(() => {});
+        updateSessionName(sessionId, text);
+      }
       setPrompt("");
       setThinking(true);
       setStreaming(true);
@@ -427,7 +536,7 @@ function AIPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("stackhand-api-token") || "dev-token"}`,
+          Authorization: `Bearer ${getStoredToken()}`,
         },
         body: JSON.stringify({
           model,
@@ -442,6 +551,23 @@ function AIPage() {
       if (!reader) throw new Error("No response body");
       const decoder = new TextDecoder();
       let buffer = "";
+
+      // Create assistant message placeholder on backend
+      try {
+        const created = await api.addAiMessage(sessionId, { role: "assistant", content: "" });
+        streamMsgIdRef.current = created.id;
+      } catch {}
+
+      // Debounce saving partial content every 2s
+      let lastSavedContent = "";
+      const savePartial = () => {
+        const msgId = streamMsgIdRef.current;
+        if (msgId && fullContent !== lastSavedContent) {
+          lastSavedContent = fullContent;
+          api.updateAiMessage(sessionId, msgId, fullContent).catch(() => {});
+        }
+      };
+      saveIntervalRef.current = setInterval(savePartial, 2000);
 
       while (true) {
         const { done, value } = await reader.read();
@@ -479,6 +605,19 @@ function AIPage() {
         }
       }
 
+      if (saveIntervalRef.current) {
+        clearInterval(saveIntervalRef.current);
+        saveIntervalRef.current = null;
+      }
+
+      // Save final content
+      const msgId = streamMsgIdRef.current;
+      if (fullContent && msgId) {
+        try {
+          await api.updateAiMessage(sessionId, msgId, fullContent);
+        } catch {}
+      }
+
       if (fullContent) {
         setSessions((prev) =>
           prev.map((s) =>
@@ -488,7 +627,7 @@ function AIPage() {
                   messages: [
                     ...s.messages,
                     {
-                      id: crypto.randomUUID(),
+                      id: msgId ?? crypto.randomUUID(),
                       role: "assistant",
                       content: fullContent,
                       ts: new Date().toISOString(),
@@ -505,6 +644,12 @@ function AIPage() {
     } finally {
       sendingRef.current = false;
       abortRef.current = null;
+      streamMsgIdRef.current = null;
+      streamSessionIdRef.current = null;
+      if (saveIntervalRef.current) {
+        clearInterval(saveIntervalRef.current);
+        saveIntervalRef.current = null;
+      }
       setThinking(false);
       setStreaming(false);
       setStreamContent("");
@@ -570,7 +715,16 @@ function AIPage() {
           {/* Scrollable history list only — header and "New chat" stay put */}
           <ScrollArea className="min-h-0 flex-1 px-2 pb-2">
             <div className="space-y-0.5">
-              {sessions.map((s) => (
+              {sessionsLoading ? (
+                <div className="flex items-center justify-center gap-2 py-8 text-xs text-muted-foreground">
+                  <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>Loading...</span>
+                </div>
+              ) : sessions.length === 0 ? (
+                <div className="px-3 py-8 text-center text-xs text-muted-foreground">
+                  No conversations yet
+                </div>
+              ) : sessions.map((s) => (
                 <div
                   key={s.id}
                   className={cn(
@@ -591,7 +745,6 @@ function AIPage() {
                     onClick={(e) => {
                       e.stopPropagation();
                       deleteSession(s.id);
-                      if (sessions.length <= 1) createSession();
                     }}
                     className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
                   >
@@ -624,7 +777,6 @@ function AIPage() {
             onClick={() => {
               deleteSession(contextMenu.sessionId);
               setContextMenu(null);
-              if (sessions.length <= 1) createSession();
             }}
           >
             Delete
@@ -780,7 +932,12 @@ function AIPage() {
         <div className="relative min-h-0 flex-1">
           <ScrollArea ref={scrollRef} className="h-full chat-scrollarea" onScroll={handleScroll}>
             <div className="mx-auto max-w-3xl px-4 py-6">
-              {messages.length === 0 && !streaming ? (
+              {sessionsLoading ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                  <IconLoader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  <p className="mt-3 text-sm text-muted-foreground">Loading conversations...</p>
+                </div>
+              ) : messages.length === 0 && !streaming ? (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
                   <div className="mb-4 grid h-12 w-12 place-items-center rounded-xl border bg-muted/30">
                     <IconRobot className="h-6 w-6 text-primary" stroke={1.5} />
@@ -804,6 +961,12 @@ function AIPage() {
                   {messages.map((m) => (
                     <MessageBubble key={m.id} m={m} />
                   ))}
+                  {!streaming && messages.length > 0 && messages[messages.length - 1].role === "assistant" && (
+                    <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground/60">
+                      <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                      <span>This response may be incomplete — it was saved mid-generation</span>
+                    </div>
+                  )}
                   {thinking && !streamContent && (
                     <div className="flex items-center gap-3 text-sm text-muted-foreground">
                       <IconLoader2 className="h-4 w-4 animate-spin" />
