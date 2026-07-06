@@ -1097,7 +1097,7 @@ function AIPage() {
                 submitMessage();
               }
             }}
-            className="relative rounded-xl border bg-background shadow-sm transition-shadow focus-within:shadow-md focus-within:border-primary/40"
+            className="flex flex-col overflow-hidden rounded-xl border bg-background shadow-sm transition-shadow focus-within:shadow-md focus-within:border-primary/40"
           >
             {attachments.length > 0 && (
               <div className="flex flex-wrap gap-2 px-3 pt-3">
@@ -1112,6 +1112,7 @@ function AIPage() {
                 ))}
               </div>
             )}
+
             <Textarea
               ref={textareaRef}
               value={prompt}
@@ -1120,26 +1121,29 @@ function AIPage() {
               onPaste={handleTextareaPaste}
               placeholder={!model ? "Select a model to start chatting…" : "Message AI Studio..."}
               rows={1}
-              className="min-h-[52px] resize-none border-0 bg-transparent px-4 py-3.5 pl-12 pr-20 text-sm shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/50"
+              className="min-h-[52px] max-h-[200px] resize-none border-0 bg-transparent px-4 py-3.5 text-sm shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/50"
               disabled={!model}
             />
-            <div className="absolute bottom-2 left-2 flex items-center gap-1">
-              {webSearchEnabled && (
-                <div className="flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary border border-primary/20">
-                  <IconWorld className="h-3.5 w-3.5" stroke={1.5} />
-                  Web
-                </div>
-              )}
-              <ChatInputTools
-                webSearchEnabled={webSearchEnabled}
-                onWebSearchToggle={setWebSearchEnabled}
-              />
-            </div>
-            <div className="absolute bottom-2 right-2 flex items-center gap-1">
+
+            {/* Toolbar row — flex, not absolutely positioned, so it never overlaps the text */}
+            <div className="flex items-center justify-between gap-2 px-3 pb-2.5 pt-1">
+              <div className="flex items-center gap-1.5">
+                <ChatInputTools
+                  webSearchEnabled={webSearchEnabled}
+                  onWebSearchToggle={setWebSearchEnabled}
+                />
+                {webSearchEnabled && (
+                  <div className="flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary border border-primary/20">
+                    <IconWorld className="h-3.5 w-3.5" stroke={1.5} />
+                    Web
+                  </div>
+                )}
+              </div>
+
               <Button
                 type="submit"
                 size="sm"
-                className="h-8 w-8 rounded-lg p-0"
+                className="h-8 w-8 shrink-0 rounded-lg p-0"
                 style={{ backgroundColor: "#4D8DF0", color: "white" }}
                 disabled={!canSend}
               >
