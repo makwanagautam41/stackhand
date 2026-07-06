@@ -305,3 +305,9 @@ export interface AiMessage {
   createdAt: string;
   sessionId: string;
 }
+
+export interface WebSearchResult {
+  title: string;
+  snippet: string;
+  url: string;
+}

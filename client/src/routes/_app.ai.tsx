@@ -16,10 +16,12 @@ import {
   IconLayoutSidebar,
   IconFileText,
   IconChevronDown,
+  IconWorld,
 } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { ChatInputTools } from "@/components/chat-input-tools";
 import { Slider } from "@/components/ui/slider";
 import {
   Select,
@@ -45,6 +47,7 @@ import type {
   OllamaModelInfo,
   OllamaMetrics,
   OllamaChatOptions,
+  WebSearchResult,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { api, getStoredToken } from "@/lib/api";
@@ -164,6 +167,19 @@ function AIPage() {
     return text.trim() ? `${blocks}\n\n${text}` : blocks;
   }, []);
 
+  const formatWebSearchContext = useCallback((results: WebSearchResult[], query: string) => {
+    const blocks = results.map((r, i) => `${i + 1}. ${r.title}\n   URL: ${r.url}\n   ${r.snippet}`);
+    return [
+      `You have been provided with web search results for the user's query. Use these results to provide accurate, up-to-date information in your response.`,
+      ``,
+      `Web Search Results for "${query}":`,
+      `===============================================================`,
+      ...blocks,
+      `===============================================================`,
+      `Instructions: Base your answer on these search results. If they are insufficient or irrelevant, acknowledge that. Always cite sources where possible by mentioning the website name.`,
+    ].join("\n");
+  }, []);
+
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [model, setModel] = useState<string>("");
@@ -194,6 +210,13 @@ function AIPage() {
   useEffect(() => {
     streamContentRef.current = streamContent;
   }, [streamContent]);
+
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
+  const webSearchEnabledRef = useRef(webSearchEnabled);
+
+  useEffect(() => {
+    webSearchEnabledRef.current = webSearchEnabled;
+  }, [webSearchEnabled]);
 
   const loadSessions = useCallback(async () => {
     if (!current?.id) return;
@@ -474,7 +497,7 @@ function AIPage() {
     streamSessionIdRef.current = null;
   }, []);
 
-  const sendStream = async (text: string) => {
+  const sendStream = async (text: string, searchQuery?: string) => {
     if (sendingRef.current || !text.trim() || !model) return;
     sendingRef.current = true;
 
@@ -531,7 +554,22 @@ function AIPage() {
       const controller = new AbortController();
       abortRef.current = controller;
 
-      const allMessages = [...sessionMessages, userMsg];
+      const allMessages: { role: string; content: string }[] = [...sessionMessages, userMsg];
+
+      // Web Search Integration: if enabled, fetch search results and inject as context
+      if (webSearchEnabledRef.current && searchQuery) {
+        try {
+          setThinking(true);
+          const searchRes = await api.webSearch(searchQuery, 5);
+          if (searchRes.results && searchRes.results.length > 0) {
+            const contextMsg = formatWebSearchContext(searchRes.results, searchQuery);
+            allMessages.unshift({ role: "system", content: contextMsg });
+          }
+        } catch (e) {
+          console.error("Web search failed:", e);
+        }
+      }
+
       const response = await fetch(api.ollamaChatStreamUrl(), {
         method: "POST",
         headers: {
@@ -663,8 +701,9 @@ function AIPage() {
     const atts = attachmentsRef.current;
     if (!text.trim() && atts.length === 0) return;
     const combined = buildOutgoingText(text, atts);
+    const searchQ = text.trim().slice(0, 200);
     setAttachments([]);
-    sendStream(combined);
+    sendStream(combined, searchQ);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -724,34 +763,36 @@ function AIPage() {
                 <div className="px-3 py-8 text-center text-xs text-muted-foreground">
                   No conversations yet
                 </div>
-              ) : sessions.map((s) => (
-                <div
-                  key={s.id}
-                  className={cn(
-                    "group relative flex items-center gap-1 rounded-lg px-3 py-2 text-sm transition-colors cursor-pointer",
-                    s.id === currentSessionId
-                      ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                  )}
-                  onClick={() => setCurrentSessionId(s.id)}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    setContextMenu({ x: e.clientX, y: e.clientY, sessionId: s.id });
-                  }}
-                >
-                  <IconHistory className="h-4 w-4 shrink-0" stroke={1.5} />
-                  <span className="flex-1 truncate">{s.name}</span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteSession(s.id);
+              ) : (
+                sessions.map((s) => (
+                  <div
+                    key={s.id}
+                    className={cn(
+                      "group relative flex items-center gap-1 rounded-lg px-3 py-2 text-sm transition-colors cursor-pointer",
+                      s.id === currentSessionId
+                        ? "bg-accent text-accent-foreground"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                    )}
+                    onClick={() => setCurrentSessionId(s.id)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setContextMenu({ x: e.clientX, y: e.clientY, sessionId: s.id });
                     }}
-                    className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
                   >
-                    <IconX className="h-3.5 w-3.5" stroke={1.5} />
-                  </button>
-                </div>
-              ))}
+                    <IconHistory className="h-4 w-4 shrink-0" stroke={1.5} />
+                    <span className="flex-1 truncate">{s.name}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteSession(s.id);
+                      }}
+                      className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
+                    >
+                      <IconX className="h-3.5 w-3.5" stroke={1.5} />
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
           </ScrollArea>
         </div>
@@ -961,12 +1002,14 @@ function AIPage() {
                   {messages.map((m) => (
                     <MessageBubble key={m.id} m={m} />
                   ))}
-                  {!streaming && messages.length > 0 && messages[messages.length - 1].role === "assistant" && (
-                    <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground/60">
-                      <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
-                      <span>This response may be incomplete — it was saved mid-generation</span>
-                    </div>
-                  )}
+                  {!streaming &&
+                    messages.length > 0 &&
+                    messages[messages.length - 1].role === "assistant" && (
+                      <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground/60">
+                        <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                        <span>This response may be incomplete — it was saved mid-generation</span>
+                      </div>
+                    )}
                   {thinking && !streamContent && (
                     <div className="flex items-center gap-3 text-sm text-muted-foreground">
                       <IconLoader2 className="h-4 w-4 animate-spin" />
@@ -989,7 +1032,6 @@ function AIPage() {
               )}
             </div>
           </ScrollArea>
-
         </div>
 
         {showScrollBottom && (
@@ -1078,9 +1120,21 @@ function AIPage() {
               onPaste={handleTextareaPaste}
               placeholder={!model ? "Select a model to start chatting…" : "Message AI Studio..."}
               rows={1}
-              className="min-h-[52px] resize-none border-0 bg-transparent px-4 py-3.5 pr-20 text-sm shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/50"
+              className="min-h-[52px] resize-none border-0 bg-transparent px-4 py-3.5 pl-12 pr-20 text-sm shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/50"
               disabled={!model}
             />
+            <div className="absolute bottom-2 left-2 flex items-center gap-1">
+              {webSearchEnabled && (
+                <div className="flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary border border-primary/20">
+                  <IconWorld className="h-3.5 w-3.5" stroke={1.5} />
+                  Web
+                </div>
+              )}
+              <ChatInputTools
+                webSearchEnabled={webSearchEnabled}
+                onWebSearchToggle={setWebSearchEnabled}
+              />
+            </div>
             <div className="absolute bottom-2 right-2 flex items-center gap-1">
               <Button
                 type="submit"

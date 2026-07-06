@@ -14,6 +14,7 @@ import type {
   OllamaFullChatResponse,
   AiSession,
   AiMessage,
+  WebSearchResult,
 } from "./types";
 import type { DockerStatus, YamlFile } from "./types";
 
@@ -464,6 +465,14 @@ export const api = {
     return request<GenerateStackResponse>("/ollama/generate-stack", {
       method: "POST",
       body: JSON.stringify({ description }),
+    });
+  },
+
+  // ---- Web Search ----
+  async webSearch(query: string, maxResults?: number) {
+    return request<{ results: WebSearchResult[] }>("/search/web", {
+      method: "POST",
+      body: JSON.stringify({ query, maxResults }),
     });
   },
 
