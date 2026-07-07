@@ -182,7 +182,13 @@ function AIPage() {
 
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [model, setModel] = useState<string>("");
+  const [model, setModel] = useState<string>(() => {
+    try {
+      return localStorage.getItem("stackhand-ai-model") || "";
+    } catch {
+      return "";
+    }
+  });
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const currentSessionIdRef = useRef(currentSessionId);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -219,16 +225,26 @@ function AIPage() {
   }, [webSearchEnabled]);
 
   const [searchEngine, setSearchEngine] = useState(() => {
-    try { return localStorage.getItem("stackhand-search-engine") || "google"; }
-    catch { return "google"; }
+    try {
+      return localStorage.getItem("stackhand-search-engine") || "google";
+    } catch {
+      return "google";
+    }
   });
   const searchEngineRef = useRef(searchEngine);
 
   useEffect(() => {
     searchEngineRef.current = searchEngine;
-    try { localStorage.setItem("stackhand-search-engine", searchEngine); }
-    catch {}
+    try {
+      localStorage.setItem("stackhand-search-engine", searchEngine);
+    } catch {}
   }, [searchEngine]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("stackhand-ai-model", model);
+    } catch {}
+  }, [model]);
 
   const loadSessions = useCallback(async () => {
     if (!current?.id) return;
@@ -328,9 +344,15 @@ function AIPage() {
 
   useEffect(() => {
     const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "instant" });
+  }, [messages]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
     if (!el || userScrolledUpRef.current) return;
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [messages, streamContent, thinking]);
+  }, [streamContent, thinking]);
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
@@ -1099,7 +1121,7 @@ function AIPage() {
         )}
 
         {/* Composer (static) */}
-        <div className="shrink-0 border-t p-4 pb-0">
+        <div className="shrink-0 border-t py-4 pb-0">
           <form
             onSubmit={(e) => {
               e.preventDefault();

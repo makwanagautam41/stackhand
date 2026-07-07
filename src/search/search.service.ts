@@ -44,7 +44,7 @@ export class SearchService {
       const ec = cfg as EngineConfig;
       const count = await this.prisma.searchLog.count({ where: { engine: name } });
       status[name] = {
-        configured: name === 'google' ? false : !!ec.key,
+        configured: !!(ec.key && (name !== 'google' || ec.cx)),
         requests: count,
       };
     }
@@ -63,7 +63,7 @@ export class SearchService {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return [];
 
-    const allowed = engine && this.engines[engine]?.key && engine !== 'google';
+    const allowed = engine && this.engines[engine]?.key && (engine !== 'google' || this.engines.google.cx);
     const eng: EngineName = allowed ? engine : this.defaultEngine();
 
     const cached = this.cache.get(`${eng}:${normalized}`);
@@ -108,6 +108,7 @@ export class SearchService {
   private defaultEngine(): EngineName {
     if (this.engines.tavily.key) return 'tavily';
     if (this.engines.brave.key) return 'brave';
+    if (this.engines.google.key && this.engines.google.cx) return 'google';
     return 'tavily';
   }
 
