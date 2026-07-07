@@ -13,6 +13,10 @@ export class PrismaService
 
   async onModuleInit() {
     await this.$connect();
+    try {
+      await this.$executeRawUnsafe('PRAGMA journal_mode=WAL');
+      await this.$executeRawUnsafe('PRAGMA busy_timeout=5000');
+    } catch {}
   }
 
   async onModuleDestroy() {

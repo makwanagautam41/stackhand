@@ -24,16 +24,32 @@ export class StackService {
 
   async findAll(workspaceId: string) {
     await this.ensureWorkspace(workspaceId);
-    const stacks = await this.prisma.stack.findMany({
-      where: { workspaceId },
-      orderBy: { createdAt: 'desc' },
-    });
-    return Promise.all(
-      stacks.map(async (s) => {
-        const status = await this.resolveStatus(s);
-        return { ...s, status };
+    const [stacks, containerGroups] = await Promise.all([
+      this.prisma.stack.findMany({
+        where: { workspaceId },
+        orderBy: { createdAt: 'desc' },
       }),
-    );
+      this.prisma.container.groupBy({
+        by: ['stackId', 'status'],
+        where: { stack: { workspaceId } },
+        _count: true,
+      }),
+    ]);
+
+    const statusMap = new Map<string, string>();
+    for (const g of containerGroups) {
+      const sid = g.stackId;
+      if (!sid) continue;
+      const current = statusMap.get(sid) ?? '';
+      if (g.status === 'running') statusMap.set(sid, 'running');
+      else if (g.status === 'error' && current !== 'running') statusMap.set(sid, 'error');
+      else if (!current) statusMap.set(sid, g.status);
+    }
+
+    return stacks.map((s) => ({
+      ...s,
+      status: this.resolveStatusFromMap(s, statusMap),
+    }));
   }
 
   async findOne(id: string) {
@@ -269,20 +285,44 @@ export class StackService {
     });
   }
 
+  private resolveStatusFromMap(
+    stack: { id: string; folderPath: string },
+    statusMap: Map<string, string>,
+  ): string {
+    const status = statusMap.get(stack.id);
+    if (status) {
+      if (status === 'running') return 'running';
+      if (status === 'error') return 'error';
+      if (status === 'stopped' || status === 'exited') return 'stopped';
+      return 'partial';
+    }
+    try {
+      const composeFile = path.join(stack.folderPath, 'docker-compose.yml');
+      if (fs.existsSync(composeFile)) return 'stopped';
+    } catch {}
+    return 'unknown';
+  }
+
   private async resolveStatus(stack: { id: string; folderPath: string }) {
     const containers = await this.prisma.container.findMany({
       where: { stackId: stack.id },
     });
     if (containers.length === 0) {
-      const composeFile = path.join(stack.folderPath, 'docker-compose.yml');
-      if (fs.existsSync(composeFile)) return 'stopped';
+      try {
+        const composeFile = path.join(stack.folderPath, 'docker-compose.yml');
+        if (fs.existsSync(composeFile)) return 'stopped';
+      } catch {}
       return 'unknown';
     }
-    const running = containers.filter((c) => c.status === 'running').length;
-    const total = containers.length;
-    if (running === total) return 'running';
-    if (running === 0) return 'stopped';
-    if (containers.some((c) => c.status === 'error')) return 'error';
+    let running = 0;
+    let error = false;
+    for (const c of containers) {
+      if (c.status === 'running') running++;
+      else if (c.status === 'error') error = true;
+    }
+    if (running === containers.length) return 'running';
+    if (running === 0 && !error) return 'stopped';
+    if (error) return 'error';
     return 'partial';
   }
 

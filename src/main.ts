@@ -2,8 +2,12 @@ import { NestFactory } from '@nestjs/core';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import { RequestLoggerMiddleware } from './common/request-logger.middleware';
+import compression from 'compression';
+import helmet from 'helmet';
+
+const logger = new Logger('Bootstrap');
 
 function getBackendHost() {
   return process.env.HOST?.trim() || '0.0.0.0';
@@ -47,7 +51,14 @@ function isAllowedOrigin(origin?: string) {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: process.env.NODE_ENV === 'production'
+      ? ['error', 'warn', 'log']
+      : ['log', 'error', 'warn', 'debug', 'verbose'],
+  });
+
+  app.use(compression());
+  app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
   app.useWebSocketAdapter(new IoAdapter(app));
   app.use(new RequestLoggerMiddleware().use);
 
@@ -65,6 +76,7 @@ async function bootstrap() {
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
+      disableErrorMessages: process.env.NODE_ENV === 'production',
     }),
   );
 
@@ -79,9 +91,17 @@ async function bootstrap() {
 
   const port = process.env.PORT ?? 4000;
   const host = getBackendHost();
+
+  // Graceful shutdown
+  app.enableShutdownHooks();
+
   await app.listen(port, host);
   const printableHost = host === '0.0.0.0' ? '127.0.0.1' : host;
-  console.log(`Stackhand backend running on http://${printableHost}:${port}`);
-  console.log(`Swagger docs at http://${printableHost}:${port}/api/docs`);
+  logger.log(`Stackhand backend running on http://${printableHost}:${port}`);
+  logger.log(`Swagger docs at http://${printableHost}:${port}/api/docs`);
 }
-bootstrap();
+
+bootstrap().catch((err) => {
+  logger.error(`Failed to start: ${err.message}`, err.stack);
+  process.exit(1);
+});

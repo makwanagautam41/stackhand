@@ -11,10 +11,17 @@ import { IS_PUBLIC_KEY } from '../common/skip-auth.decorator';
 
 @Injectable()
 export class ApiKeyGuard implements CanActivate {
+  private readonly expectedToken: string;
+
   constructor(
     private configService: ConfigService,
     private reflector: Reflector,
-  ) {}
+  ) {
+    this.expectedToken = this.configService.get<string>(
+      'STACKHAND_API_TOKEN',
+      'dev-token',
+    );
+  }
 
   canActivate(
     context: ExecutionContext,
@@ -28,11 +35,7 @@ export class ApiKeyGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const authHeader = request.headers['authorization'] ?? '';
     const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-    const expected = this.configService.get<string>(
-      'STACKHAND_API_TOKEN',
-      'dev-token',
-    );
-    if (!token || token !== expected) {
+    if (!token || token !== this.expectedToken) {
       throw new UnauthorizedException('Invalid or missing API token');
     }
     return true;

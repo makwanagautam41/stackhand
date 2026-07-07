@@ -40,6 +40,9 @@ model Stack {
   containers    Container[]
   yamlVersions  YamlVersion[]
   chats         ChatMessage[]
+
+  @@index([workspaceId])
+  @@index([status])
 }
 
 model Container {
@@ -52,6 +55,9 @@ model Container {
 
   stackId String?
   stack   Stack?  @relation(fields: [stackId], references: [id], onDelete: SetNull)
+
+  @@index([stackId])
+  @@index([status])
 }
 
 model YamlVersion {
@@ -122,6 +128,9 @@ model Activity {
 
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([ts])
 }
 
 model Setting {
@@ -140,6 +149,8 @@ model AiSession {
   workspaceId String
   workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   messages    AiMessage[]
+
+  @@index([workspaceId])
 }
 
 model AiMessage {
@@ -158,6 +169,9 @@ model SearchLog {
   engine    String
   results   Int      @default(0)
   createdAt DateTime @default(now())
+
+  @@index([engine])
+  @@index([createdAt])
 }
 
 model YamlBackup {

@@ -1,0 +1,20 @@
+[Unit]
+Description=Stackhand - Docker/YAML Stack Manager
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/home/gautam-makwana/Workspace/stackhand
+Environment=NODE_ENV=production
+ExecStartPre=/usr/bin/npm run build --if-present
+ExecStart=/usr/bin/node dist/src/main.js
+Restart=always
+RestartSec=5
+StandardOutput=append:stackhand-api.log
+StandardError=append:stackhand-api.log
+SyslogIdentifier=stackhand
+
+[Install]
+WantedBy=multi-user.target
