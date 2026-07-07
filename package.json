@@ -32,6 +32,7 @@
     "prod": "npm run build && npm run kill:ports && NODE_ENV=production concurrently -n backend,frontend -c blue,green \"npm run start:prod\" \"npm run start:prod:frontend\"",
     "dev:backend": "npm run start:dev",
     "dev:frontend": "cd client && npm run dev",
+    "deploy": "bash scripts/deploy.sh",
     "setup": "npm install && cd client && npm install && npx prisma generate && npx prisma migrate deploy && npm run prisma:seed"
   },
   "dependencies": {
