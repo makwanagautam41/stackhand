@@ -179,11 +179,12 @@ export class StackService {
 
   async composeFromYaml(yamlPath: string, yamlContent: string): Promise<{ message: string; containerId: string }> {
     const dir = path.dirname(yamlPath);
+    const baseName = path.basename(yamlPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
     fs.writeFileSync(yamlPath, yamlContent, 'utf-8');
-    const result = await this.execComposeWithOutput(dir, 'up', ['-d']);
+    const result = await this.execComposeWithOutput(dir, 'up', ['-d'], baseName);
     let containerId = '';
     const lines = result.stdout.split('\n');
     for (const line of lines) {
@@ -383,6 +384,7 @@ export class StackService {
     folderPath: string,
     cmd: string,
     args: string[] = [],
+    composeFile: string = 'docker-compose.yml',
   ): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
       const child = spawn(
@@ -390,7 +392,7 @@ export class StackService {
         [
           'compose',
           '-f',
-          path.join(folderPath, 'docker-compose.yml'),
+          path.join(folderPath, composeFile),
           cmd,
           ...args,
         ],
@@ -427,8 +429,9 @@ export class StackService {
     folderPath: string,
     cmd: string,
     args: string[] = [],
+    composeFile: string = 'docker-compose.yml',
   ): Promise<void> {
-    return this.execComposeWithOutput(folderPath, cmd, args).then(() => {});
+    return this.execComposeWithOutput(folderPath, cmd, args, composeFile).then(() => {});
   }
 
   private async ensureWorkspace(id: string) {

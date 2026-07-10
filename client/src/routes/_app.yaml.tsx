@@ -63,6 +63,7 @@ import { listBackups, recordBackup, type BackupRow } from "@/lib/sqlite";
 import { api } from "@/lib/api";
 import type { EnvVar, YamlFile } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import * as yaml from "js-yaml";
 
 export const Route = createFileRoute("/_app/yaml")({
   component: YamlPage,
@@ -479,7 +480,10 @@ function YamlPage() {
                 <Button onClick={async () => {
                   if (!spinYaml || !current) return;
                   try {
-                    const folderName = spinYaml.name.replace(/\.(yml|yaml)$/, "") + "-" + Date.now();
+                    const parsed = yaml.load(spinModifiedContent) as any;
+                    const services = parsed?.services;
+                    const serviceName = services ? Object.keys(services)[0] : spinYaml.name.replace(/\.(yml|yaml)$/, "");
+                    const folderName = serviceName;
                     const folderPath = current.rootFolder + "/" + folderName;
                     await api.writeFile(folderPath + "/" + spinYaml.name, spinModifiedContent);
                     await api.composeUpFromYaml(folderPath + "/" + spinYaml.name, spinModifiedContent);
