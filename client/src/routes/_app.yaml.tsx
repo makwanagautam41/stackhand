@@ -17,9 +17,11 @@ import {
   IconKey,
   IconPencil,
   IconPlus,
+  IconRefresh,
   IconTrash,
   IconUpload,
   IconRestore,
+  IconPlayerPlay,
 } from "@tabler/icons-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -92,6 +94,7 @@ function YamlPage() {
     createYamlChild,
     pushActivity,
     hydrated,
+    refresh,
   } = useWorkspaces();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [renameFor, setRenameFor] = useState<YamlFile | null>(null);
@@ -106,6 +109,9 @@ function YamlPage() {
 
   const [exportOpen, setExportOpen] = useState(false);
   const [exportData, setExportData] = useState("");
+  const [spinYaml, setSpinYaml] = useState<YamlFile | null>(null);
+  const [spinModify, setSpinModify] = useState<"ask" | "modify" | "direct">("ask");
+  const [spinModifiedContent, setSpinModifiedContent] = useState("");
 
   useEffect(() => {
     if (current?.id) {
@@ -204,11 +210,19 @@ function YamlPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => { refresh(); toast.success("Explorer refreshed"); }}>
+            <IconRefresh className="h-3.5 w-3.5" stroke={1.75} /> Refresh
+          </Button>
           <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setImportOpen(true)}>
             <IconUpload className="h-3.5 w-3.5" stroke={1.75} /> Import
           </Button>
           {selected && !selected.isDir && (
             <>
+              {selected.name.endsWith(".yml") || selected.name.endsWith(".yaml") ? (
+                <Button size="sm" variant="outline" className="h-8 gap-1.5 text-emerald-500 hover:text-emerald-600" onClick={() => setSpinYaml(selected)}>
+                  <IconPlayerPlay className="h-3.5 w-3.5" stroke={1.75} /> Spin
+                </Button>
+              ) : null}
               <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={doExport}>
                 <IconDownload className="h-3.5 w-3.5" stroke={1.75} /> Export
               </Button>
@@ -411,6 +425,77 @@ function YamlPage() {
             <Button variant="ghost" onClick={() => setImportOpen(false)} className="rounded-md">Cancel</Button>
             <Button onClick={doImport} className="rounded-md">Import</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Spin YAML dialog */}
+      <Dialog open={!!spinYaml} onOpenChange={(o) => { if (!o) { setSpinYaml(null); setSpinModify("ask"); } }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="font-mono">Spin container from {spinYaml?.name}</DialogTitle>
+            <DialogDescription>
+              This will run docker compose up with this YAML file.
+            </DialogDescription>
+          </DialogHeader>
+          {spinModify === "ask" ? (
+            <div className="space-y-3 py-2">
+              <p className="text-sm text-muted-foreground">
+                Would you like to modify the YAML before spinning the container?
+              </p>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => {
+                  setSpinModifiedContent(spinYaml?.content || "");
+                  setSpinModify("modify");
+                }}>
+                  Yes, modify it
+                </Button>
+                <Button onClick={async () => {
+                  setSpinModify("direct");
+                  if (!spinYaml || !current) return;
+                  try {
+                    await api.composeUpFromYaml(spinYaml.path, spinYaml.content);
+                    toast.success("Container spun from " + spinYaml.name);
+                    setSpinYaml(null);
+                    setSpinModify("ask");
+                  } catch (e: any) {
+                    toast.error(e.message);
+                    setSpinModify("ask");
+                  }
+                }}>
+                  No, spin as-is
+                </Button>
+              </div>
+            </div>
+          ) : spinModify === "modify" ? (
+            <div className="space-y-3 py-2">
+              <textarea
+                value={spinModifiedContent}
+                onChange={(e) => setSpinModifiedContent(e.target.value)}
+                rows={16}
+                className="w-full rounded-md border bg-background px-3 py-2 font-mono text-xs"
+              />
+              <div className="flex gap-2 justify-end">
+                <Button variant="ghost" onClick={() => setSpinModify("ask")}>Back</Button>
+                <Button onClick={async () => {
+                  if (!spinYaml || !current) return;
+                  try {
+                    const folderName = spinYaml.name.replace(/\.(yml|yaml)$/, "") + "-" + Date.now();
+                    const folderPath = current.rootFolder + "/" + folderName;
+                    await api.writeFile(folderPath + "/" + spinYaml.name, spinModifiedContent);
+                    await api.composeUpFromYaml(folderPath + "/" + spinYaml.name, spinModifiedContent);
+                    toast.success("Modified container spun from new folder");
+                    setSpinYaml(null);
+                    setSpinModify("ask");
+                    refresh();
+                  } catch (e: any) {
+                    toast.error(e.message);
+                  }
+                }}>
+                  Confirm & Spin
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>

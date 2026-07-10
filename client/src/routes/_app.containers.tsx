@@ -43,6 +43,7 @@ import {
 import { StatusBadge } from "@/components/status-badge";
 import { LogsViewer } from "@/components/logs-viewer";
 import { api } from "@/lib/api";
+import { emitSync, onSync, SYNC_EVENTS } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/containers")({
   component: ContainersPage,
@@ -91,10 +92,11 @@ function ContainersPage() {
 
   useEffect(() => {
     fetchContainers();
-    // Poll every 5 seconds for live status updates
     intervalRef.current = setInterval(() => fetchContainers(true), 5000);
+    const unsub = onSync(SYNC_EVENTS.CONTAINERS_CHANGED, () => fetchContainers(true));
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      unsub();
     };
   }, []);
 
@@ -117,6 +119,7 @@ function ContainersPage() {
       else await api.restartContainer(c.id);
       toast.success(`${c.name} ${action === "start" ? "started" : action === "stop" ? "stopped" : "restarted"}`);
       await fetchContainers(true);
+      emitSync(SYNC_EVENTS.CONTAINERS_CHANGED, { action, containerId: c.id });
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -132,6 +135,7 @@ function ContainersPage() {
       await api.removeContainer(c.id);
       toast.success(`${c.name} removed`);
       await fetchContainers(true);
+      emitSync(SYNC_EVENTS.CONTAINERS_CHANGED, { action: "remove", containerId: c.id });
     } catch (e: any) {
       toast.error(e.message);
     } finally {

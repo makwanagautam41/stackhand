@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +28,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { api } from "@/lib/api";
+import { emitSync, onSync, SYNC_EVENTS } from "@/lib/utils";
 import type { BackendImage } from "@/lib/types";
 
 export const Route = createFileRoute("/_app/images")({
@@ -50,6 +52,9 @@ function ImagesPage() {
   const [runImage, setRunImage] = useState<{ name: string } | null>(null);
   const [runPort, setRunPort] = useState("");
   const [runName, setRunName] = useState("");
+  const [runEnv, setRunEnv] = useState<{ key: string; value: string }[]>([]);
+  const [runVolumes, setRunVolumes] = useState<string[]>([]);
+  const [runCmd, setRunCmd] = useState("");
   const [runCreating, setRunCreating] = useState(false);
 
   const fetchImages = async (silent = false) => {
@@ -66,6 +71,8 @@ function ImagesPage() {
 
   useEffect(() => {
     fetchImages();
+    const unsub = onSync(SYNC_EVENTS.IMAGES_CHANGED, () => fetchImages(true));
+    return () => { unsub(); };
   }, []);
 
   const removeImage = async (img: BackendImage) => {
@@ -75,6 +82,7 @@ function ImagesPage() {
       await api.removeImage(tag);
       toast.success(`Removed ${tag}`);
       await fetchImages(true);
+      emitSync(SYNC_EVENTS.IMAGES_CHANGED, { action: "remove", tag });
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -88,15 +96,22 @@ function ImagesPage() {
     setRunCreating(true);
     try {
       const port = runPort ? parseInt(runPort, 10) : undefined;
+      const env = runEnv.filter((e) => e.key).reduce((acc, e) => ({ ...acc, [e.key]: e.value }), {});
       const res = await api.createContainer({
         image: runImage.name,
         name: runName || undefined,
         port,
+        env: Object.keys(env).length > 0 ? env : undefined,
+        volumes: runVolumes.filter(Boolean).length > 0 ? runVolumes : undefined,
+        cmd: runCmd ? runCmd.split(/\s+/) : undefined,
       });
       toast.success(`Container "${res.name}" started from ${runImage.name}`);
       setRunImage(null);
       setRunName("");
       setRunPort("");
+      setRunEnv([]);
+      setRunVolumes([]);
+      setRunCmd("");
     } catch (e: any) {
       toast.error(`Failed to create container: ${e.message}`);
     } finally {
@@ -199,6 +214,7 @@ function ImagesPage() {
                             size="sm"
                             variant="ghost"
                             onClick={() => setRunImage({ name: tag })}
+                            title="Run container from this image"
                           >
                             <IconPlayerPlay className="h-4 w-4" stroke={1.75} />
                           </Button>
@@ -223,34 +239,87 @@ function ImagesPage() {
       </Card>
 
       {/* run container dialog */}
-      <Dialog open={!!runImage} onOpenChange={(o) => { if (!o) { setRunImage(null); setRunName(""); setRunPort(""); } }}>
-        <DialogContent>
+      <Dialog open={!!runImage} onOpenChange={(o) => { if (!o) { setRunImage(null); setRunName(""); setRunPort(""); setRunEnv([]); setRunVolumes([]); setRunCmd(""); } }}>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Run Container</DialogTitle>
             <DialogDescription className="font-mono">{runImage?.name}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1">
-              <Label>Container name (optional)</Label>
-              <Input
-                value={runName}
-                onChange={(e) => setRunName(e.target.value)}
-                placeholder={runImage?.name.split("/").pop()?.split(":")[0] || "my-container"}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Port (optional)</Label>
-              <Input
-                value={runPort}
-                onChange={(e) => setRunPort(e.target.value)}
-                placeholder="e.g. 8080"
-                type="number"
-              />
-              <p className="text-xs text-muted-foreground">Exposes container port on the same host port</p>
-            </div>
-          </div>
+          <Tabs defaultValue="basic" className="mt-2">
+            <TabsList className="w-full">
+              <TabsTrigger value="basic" className="flex-1">Basic</TabsTrigger>
+              <TabsTrigger value="env" className="flex-1">Env</TabsTrigger>
+              <TabsTrigger value="advanced" className="flex-1">Advanced</TabsTrigger>
+            </TabsList>
+            <TabsContent value="basic" className="space-y-3 pt-3">
+              <div className="space-y-1">
+                <Label>Container name (optional)</Label>
+                <Input
+                  value={runName}
+                  onChange={(e) => setRunName(e.target.value)}
+                  placeholder={runImage?.name.split("/").pop()?.split(":")[0] || "my-container"}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Port (optional)</Label>
+                <Input
+                  value={runPort}
+                  onChange={(e) => setRunPort(e.target.value)}
+                  placeholder="e.g. 8080"
+                  type="number"
+                />
+                <p className="text-xs text-muted-foreground">Exposes container port on the same host port</p>
+              </div>
+            </TabsContent>
+            <TabsContent value="env" className="space-y-3 pt-3">
+              {runEnv.map((e, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Input
+                    value={e.key}
+                    onChange={(ev) => setRunEnv((prev) => prev.map((r, j) => j === i ? { ...r, key: ev.target.value } : r))}
+                    placeholder="KEY"
+                    className="font-mono text-xs flex-1"
+                  />
+                  <span className="text-muted-foreground">=</span>
+                  <Input
+                    value={e.value}
+                    onChange={(ev) => setRunEnv((prev) => prev.map((r, j) => j === i ? { ...r, value: ev.target.value } : r))}
+                    placeholder="value"
+                    className="font-mono text-xs flex-1"
+                  />
+                  <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setRunEnv((prev) => prev.filter((_, j) => j !== i))}>
+                    <IconTrash className="h-3.5 w-3.5" stroke={1.75} />
+                  </Button>
+                </div>
+              ))}
+              <Button size="sm" variant="outline" onClick={() => setRunEnv((prev) => [...prev, { key: "", value: "" }])}>
+                Add env variable
+              </Button>
+            </TabsContent>
+            <TabsContent value="advanced" className="space-y-3 pt-3">
+              <div className="space-y-1">
+                <Label>Volumes (one per line, e.g. /host:/container)</Label>
+                <textarea
+                  value={runVolumes.join("\n")}
+                  onChange={(e) => setRunVolumes(e.target.value.split("\n"))}
+                  rows={3}
+                  className="w-full rounded-md border bg-background px-3 py-2 font-mono text-xs"
+                  placeholder={"/host/path:/container/path"}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Command (optional)</Label>
+                <Input
+                  value={runCmd}
+                  onChange={(e) => setRunCmd(e.target.value)}
+                  placeholder="e.g. --port 8080 --verbose"
+                  className="font-mono text-xs"
+                />
+              </div>
+            </TabsContent>
+          </Tabs>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setRunImage(null); setRunName(""); setRunPort(""); }}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setRunImage(null); setRunName(""); setRunPort(""); setRunEnv([]); setRunVolumes([]); setRunCmd(""); }}>Cancel</Button>
             <Button onClick={doRunContainer} disabled={runCreating}>
               {runCreating ? "Creating…" : "Create & Start"}
             </Button>

@@ -4,10 +4,8 @@ import { toast } from "sonner";
 import {
   Check,
   FolderOpen,
-  Loader2,
   Monitor,
   Moon,
-  RefreshCw,
   Sun,
   Trash2,
   Download,
@@ -17,8 +15,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -42,7 +38,7 @@ import { useWorkspaces } from "@/lib/workspace-store";
 import { useTheme, type Theme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
-import { WORKSPACE_COLORS, WORKSPACE_ICONS, DEFAULT_MODELS } from "@/lib/constants";
+import { WORKSPACE_COLORS, WORKSPACE_ICONS } from "@/lib/constants";
 import { getWorkspaceIcon } from "@/lib/icon-map";
 
 export const Route = createFileRoute("/_app/settings")({
@@ -67,7 +63,6 @@ function SettingsPage() {
   const [icon, setIcon] = useState(current?.icon ?? WORKSPACE_ICONS[0]);
   const [folderOpen, setFolderOpen] = useState(false);
   const [tempFolder, setTempFolder] = useState(current?.rootFolder ?? "/home/user");
-  const [refreshing, setRefreshing] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   if (!current) return null;
@@ -82,31 +77,6 @@ function SettingsPage() {
     }
   };
 
-  const toggleModel = (id: string, enabled: boolean) => {
-    const models = (current.models.length > 0 ? current.models : DEFAULT_MODELS).map((m) =>
-      m.id === id ? { ...m, enabled } : m,
-    );
-    updateWorkspace(current.id, { models, ollamaConnected: true } as any);
-  };
-
-  const refreshModels = async () => {
-    setRefreshing(true);
-    try {
-      const models = await api.ollamaModels();
-      updateWorkspace(current.id, {
-        ollamaConnected: true,
-        models: models.map((m) => ({ id: m.id, name: m.name, size: `${m.size}`, enabled: true })),
-      } as any);
-      toast.success("Models refreshed");
-    } catch (e: any) {
-      toast.error(e.message ?? "Failed to fetch models");
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  const modelList = current.models.length > 0 ? current.models : DEFAULT_MODELS;
-
   return (
     <div className="space-y-5">
       <div>
@@ -120,7 +90,6 @@ function SettingsPage() {
         <TabsList className="rounded-md">
           <TabsTrigger value="workspace" className="rounded-md">Workspace</TabsTrigger>
           <TabsTrigger value="appearance" className="rounded-md">Appearance</TabsTrigger>
-          <TabsTrigger value="ollama" className="rounded-md">Ollama</TabsTrigger>
           <TabsTrigger value="advanced" className="rounded-md">Advanced</TabsTrigger>
         </TabsList>
 
@@ -251,55 +220,6 @@ function SettingsPage() {
                       {theme === id && <Check className="h-4 w-4 text-primary" />}
                     </div>
                   </button>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="ollama" className="space-y-4 pt-4">
-          <Card>
-            <CardHeader className="flex-row items-center justify-between space-y-0">
-              <div>
-                <CardTitle className="text-base">Connection</CardTitle>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {current.ollamaConnected ? (
-                    <span className="text-emerald-600 dark:text-emerald-400">
-                      ● Connected to http://localhost:11434
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">● Not connected</span>
-                  )}
-                </p>
-              </div>
-              <Button variant="outline" onClick={refreshModels} disabled={refreshing}>
-                {refreshing ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                )}
-                Refresh models
-              </Button>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-lg border">
-                {modelList.map((m) => (
-                  <div
-                    key={m.id}
-                    className="flex items-center justify-between gap-3 border-b p-3 last:border-b-0"
-                  >
-                    <div>
-                      <div className="text-mono text-sm">{m.name}</div>
-                      <div className="text-xs text-muted-foreground">{m.size}</div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Badge variant="secondary">local</Badge>
-                      <Switch
-                        checked={m.enabled}
-                        onCheckedChange={(v) => toggleModel(m.id, Boolean(v))}
-                      />
-                    </div>
-                  </div>
                 ))}
               </div>
             </CardContent>

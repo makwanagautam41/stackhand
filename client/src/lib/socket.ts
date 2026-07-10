@@ -47,6 +47,8 @@ export function disconnectSocket() {
 export interface SocketEventHandlers {
   onLogs?: (data: { stackId: string; line: string }) => void;
   onLogsEnd?: (data: { stackId: string }) => void;
+  onContainerLogs?: (data: { containerId: string; line: string }) => void;
+  onContainerLogsEnd?: (data: { containerId: string }) => void;
   onComposeProgress?: (data: { stackId: string; line: string }) => void;
   onComposeEnd?: (data: { stackId: string; code: number }) => void;
   onContainerStats?: (data: { containerId: string; stats: any }) => void;
@@ -67,6 +69,8 @@ export function useSocket(handlers: SocketEventHandlers) {
 
     const onLogs = (d: any) => handlersRef.current.onLogs?.(d);
     const onLogsEnd = (d: any) => handlersRef.current.onLogsEnd?.(d);
+    const onContainerLogs = (d: any) => handlersRef.current.onContainerLogs?.(d);
+    const onContainerLogsEnd = (d: any) => handlersRef.current.onContainerLogsEnd?.(d);
     const onCompose = (d: any) => handlersRef.current.onComposeProgress?.(d);
     const onComposeEnd = (d: any) => handlersRef.current.onComposeEnd?.(d);
     const onStats = (d: any) => handlersRef.current.onContainerStats?.(d);
@@ -79,6 +83,8 @@ export function useSocket(handlers: SocketEventHandlers) {
 
     s.on("stack:logs", onLogs);
     s.on("stack:logs:end", onLogsEnd);
+    s.on("container:logs", onContainerLogs);
+    s.on("container:logs:end", onContainerLogsEnd);
     s.on("stack:compose-progress", onCompose);
     s.on("stack:compose-end", onComposeEnd);
     s.on("container:stats", onStats);
@@ -119,6 +125,14 @@ export function stopLogs(stackId: string) {
 
 export function subscribeToCompose(stackId: string, action: "up" | "down") {
   emit("stack:compose-progress", { stackId, action });
+}
+
+export function subscribeToContainerLogs(containerId: string, tail?: number) {
+  emit("container:logs", { containerId, tail });
+}
+
+export function stopContainerLogs(containerId: string) {
+  emit("container:logs:stop", { containerId });
 }
 
 export function subscribeToContainerStats(containerId: string) {

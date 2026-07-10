@@ -11,7 +11,7 @@ import { Server, Socket } from 'socket.io';
 import { StackService } from '../stack/stack.service';
 import { ContainerService } from '../container/container.service';
 import { ImageService } from '../image/image.service';
-import { ChildProcess } from 'child_process';
+import { ChildProcess, spawn } from 'child_process';
 import { getDockerClient } from '../common/docker-client';
 
 const docker = getDockerClient();
@@ -136,6 +136,51 @@ export class StackGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() data: { stackId: string },
   ) {
     const key = `logs:${data.stackId}:${client.id}`;
+    const state = this.activeStreams.get(key);
+    if (state) {
+      state.process?.kill();
+      this.activeStreams.delete(key);
+    }
+  }
+
+  @SubscribeMessage('container:logs')
+  async handleContainerLogs(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { containerId: string; tail?: number },
+  ) {
+    try {
+      const child = spawn('docker', [
+        'logs', '-f', '--tail', String(data.tail ?? 200), '--timestamps', data.containerId,
+      ]);
+      const key = `container-logs:${data.containerId}:${client.id}`;
+      this.activeStreams.set(key, { process: child, clientId: client.id });
+
+      child.stdout?.on('data', (d: Buffer) => {
+        client.emit('container:logs', {
+          containerId: data.containerId,
+          line: d.toString(),
+        });
+      });
+      child.stderr?.on('data', (d: Buffer) => {
+        client.emit('container:logs', {
+          containerId: data.containerId,
+          line: d.toString(),
+        });
+      });
+      child.on('close', () => {
+        client.emit('container:logs:end', { containerId: data.containerId });
+      });
+    } catch (e: any) {
+      client.emit('error', { message: e.message });
+    }
+  }
+
+  @SubscribeMessage('container:logs:stop')
+  handleStopContainerLogs(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { containerId: string },
+  ) {
+    const key = `container-logs:${data.containerId}:${client.id}`;
     const state = this.activeStreams.get(key);
     if (state) {
       state.process?.kill();

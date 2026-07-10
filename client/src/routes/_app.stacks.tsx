@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { load as yamlLoad } from "js-yaml";
 import {
@@ -12,7 +12,6 @@ import {
   RotateCw,
   Search,
   Square,
-  Terminal,
   Trash2,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -45,13 +44,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -68,9 +60,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/status-badge";
-import { LogsViewer } from "@/components/logs-viewer";
 import { useWorkspaces } from "@/lib/workspace-store";
 import { api } from "@/lib/api";
+import { onSync, SYNC_EVENTS } from "@/lib/utils";
 import type { Stack, StackStatus } from "@/lib/types";
 
 const STARTER_TEMPLATES = [
@@ -98,9 +90,13 @@ function StacksPage() {
   const [filter, setFilter] = useState<"all" | StackStatus>("all");
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState<Record<string, boolean>>({});
-  const [logsFor, setLogsFor] = useState<Stack | null>(null);
   const [deleteFor, setDeleteFor] = useState<Stack | null>(null);
   const [newOpen, setNewOpen] = useState(false);
+
+  useEffect(() => {
+    const unsub = onSync("*", () => refreshStacks());
+    return () => { unsub(); };
+  }, []);
 
   if (!current) return null;
   const stacks = stacksByWs[current.id] ?? [];
@@ -258,14 +254,6 @@ function StacksPage() {
                         >
                           <RotateCw className="h-4 w-4" />
                         </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => setLogsFor(s)}
-                          title="Logs"
-                        >
-                          <Terminal className="h-4 w-4" />
-                        </Button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button size="icon" variant="ghost">
@@ -295,19 +283,6 @@ function StacksPage() {
           </div>
         )}
       </Card>
-
-      {/* Logs sheet */}
-      <Sheet open={!!logsFor} onOpenChange={(v) => !v && setLogsFor(null)}>
-        <SheetContent side="right" className="w-full sm:max-w-2xl">
-          <SheetHeader>
-            <SheetTitle>Logs · {logsFor?.name}</SheetTitle>
-            <SheetDescription>Live stream from Docker</SheetDescription>
-          </SheetHeader>
-          <div className="mt-4">
-            {logsFor && <LogsViewer name={logsFor.name} stackId={logsFor.id} />}
-          </div>
-        </SheetContent>
-      </Sheet>
 
       {/* Delete confirm */}
       <AlertDialog open={!!deleteFor} onOpenChange={(v) => !v && setDeleteFor(null)}>

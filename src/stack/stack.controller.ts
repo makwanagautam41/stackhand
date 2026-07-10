@@ -60,6 +60,12 @@ export class StackController {
     return this.service.remove(id, deleteFolder === 'true');
   }
 
+  @Post('stacks/from-yaml')
+  @ApiOperation({ summary: 'docker compose up from raw YAML path' })
+  composeFromYaml(@Body('yamlPath') yamlPath: string, @Body('yamlContent') yamlContent: string) {
+    return this.service.composeFromYaml(yamlPath, yamlContent);
+  }
+
   @Post('stacks/:id/up')
   @ApiOperation({ summary: 'docker compose up -d' })
   composeUp(@Param('id') id: string) {

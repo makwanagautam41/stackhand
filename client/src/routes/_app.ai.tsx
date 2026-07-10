@@ -342,12 +342,16 @@ function AIPage() {
     if (!model && models.length > 0) setModel(models[0].name);
   }, [model, models]);
 
+  // Scroll to bottom when messages change (session switch, new message)
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "instant" });
-  }, [messages]);
+    requestAnimationFrame(() => {
+      el.scrollTo({ top: el.scrollHeight, behavior: "instant" });
+    });
+  }, [messages, currentSessionId]);
 
+  // Scroll to bottom during streaming
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || userScrolledUpRef.current) return;

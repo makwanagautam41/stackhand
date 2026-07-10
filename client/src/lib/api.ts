@@ -255,6 +255,13 @@ export const api = {
     return request<{ stdout: string; stderr: string }>(`/stacks/${id}/up`, { method: "POST" });
   },
 
+  async composeUpFromYaml(yamlPath: string, yamlContent: string) {
+    return request<{ message: string; containerId: string }>("/stacks/from-yaml", {
+      method: "POST",
+      body: JSON.stringify({ yamlPath, yamlContent }),
+    });
+  },
+
   async composeDown(id: string) {
     return request<{ stdout: string; stderr: string }>(`/stacks/${id}/down`, { method: "POST" });
   },

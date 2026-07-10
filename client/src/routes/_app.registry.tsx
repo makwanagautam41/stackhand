@@ -81,6 +81,9 @@ interface PullTask {
   layers: { id: string; status: string; progress?: string; progressDetail?: any }[];
   status: "pulling" | "done" | "error";
   error?: string;
+  startTime?: number;
+  totalBytes?: number;
+  downloadedBytes?: number;
 }
 
 /* ── helpers ── */
@@ -111,6 +114,15 @@ function formatBytes(bytes: number): string {
   if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} MB`;
   if (bytes >= 1_024) return `${(bytes / 1_024).toFixed(1)} KB`;
   return `${bytes} B`;
+}
+
+function parseBytes(value: string, unit: string): number {
+  const v = parseFloat(value) || 0;
+  const u = unit.toLowerCase();
+  if (u === "gb" || u === "gib") return v * 1073741824;
+  if (u === "mb" || u === "mib") return v * 1048576;
+  if (u === "kb" || u === "kib") return v * 1024;
+  return v;
 }
 
 const POPULAR_SECTIONS = [
@@ -307,7 +319,7 @@ function RegistryPage() {
     const key = `${name}:${tag}`;
     if (pullTasks[key]?.status === "pulling") return;
 
-    const task: PullTask = { imageName: key, layers: [], status: "pulling" };
+    const task: PullTask = { imageName: key, layers: [], status: "pulling", startTime: Date.now() };
     setPullTasks((prev) => ({ ...prev, [key]: task }));
     setActivePullKey(key);
 
@@ -321,10 +333,44 @@ function RegistryPage() {
           const t = prev[key];
           if (!t) return prev;
           const existingIds = new Set(t.layers.map((l) => l.id));
+          let totalBytes = t.totalBytes || 0;
+          let downloadedBytes = t.downloadedBytes || 0;
           if (data.id && !existingIds.has(data.id)) {
-            return { ...prev, [key]: { ...t, layers: [...t.layers, { id: data.id, status: data.status, progress: data.progress, progressDetail: data.progressDetail }] } };
+            const newLayer = { id: data.id, status: data.status, progress: data.progress, progressDetail: data.progressDetail };
+            if (data.status === "Downloading" && data.progress) {
+              const match = data.progress.match(/([\d.]+)\s*(\w+)\/([\d.]+)\s*(\w+)/);
+              if (match) {
+                const parsed = parseBytes(match[1], match[2]);
+                const total = parseBytes(match[3], match[4]);
+                if (parsed > 0) downloadedBytes += parsed;
+                if (total > 0) totalBytes += total;
+              }
+            }
+            return { ...prev, [key]: { ...t, layers: [...t.layers, newLayer], totalBytes, downloadedBytes } };
           }
-          return { ...prev, [key]: { ...t, layers: t.layers.map((l) => l.id === data.id ? { ...l, status: data.status, progress: data.progress, progressDetail: data.progressDetail } : l) } };
+          if (data.status === "Downloading" && data.progress) {
+            const match = data.progress.match(/([\d.]+)\s*(\w+)\/([\d.]+)\s*(\w+)/);
+            if (match) {
+              const oldLayer = t.layers.find((l) => l.id === data.id);
+              const oldProgress = oldLayer?.progress || "";
+              const oldMatch = oldProgress.match(/([\d.]+)\s*(\w+)\/([\d.]+)\s*(\w+)/);
+              const oldDownloaded = oldMatch ? parseBytes(oldMatch[1], oldMatch[2]) : 0;
+              const newDownloaded = parseBytes(match[1], match[2]);
+              const parsed = newDownloaded - oldDownloaded;
+              if (parsed > 0) downloadedBytes = (t.downloadedBytes || 0) + parsed;
+              const total = parseBytes(match[3], match[4]);
+              totalBytes = (t.totalBytes || 0);
+              if (total > t.totalBytes! - (t.totalBytes || 0) + oldDownloaded) {
+                totalBytes = total;
+                const otherLayers = t.layers.filter((l) => l.id !== data.id && l.progress?.includes("/"));
+                otherLayers.forEach((ol) => {
+                  const om = ol.progress!.match(/([\d.]+)\s*(\w+)\/([\d.]+)\s*(\w+)/);
+                  if (om) totalBytes += parseBytes(om[3], om[4]);
+                });
+              }
+            }
+          }
+          return { ...prev, [key]: { ...t, layers: t.layers.map((l) => l.id === data.id ? { ...l, status: data.status, progress: data.progress, progressDetail: data.progressDetail } : l), totalBytes, downloadedBytes } };
         });
       } catch {}
     });
@@ -744,7 +790,11 @@ function RegistryPage() {
             </DialogTitle>
             {activePullKey && pullTasks[activePullKey] && (
               <DialogDescription>
-                {pullTasks[activePullKey].status === "pulling" && `${pullTasks[activePullKey].layers.length} layers`}
+                {pullTasks[activePullKey].status === "pulling" && (() => {
+                  const t = pullTasks[activePullKey];
+                  const pct = t.totalBytes && t.totalBytes > 0 ? Math.round((t.downloadedBytes || 0) / t.totalBytes * 100) : 0;
+                  return `${t.layers.length} layers · ${pct}%`;
+                })()}
                 {pullTasks[activePullKey].status === "done" && "Completed successfully"}
                 {pullTasks[activePullKey].status === "error" && pullTasks[activePullKey].error}
               </DialogDescription>
@@ -752,23 +802,74 @@ function RegistryPage() {
           </DialogHeader>
 
           {activePullKey && pullTasks[activePullKey] && (
-            <ScrollArea className="h-[350px] rounded-md border bg-muted p-3">
+            <ScrollArea className="h-[400px] rounded-md border bg-muted p-3">
+              {/* Overall progress bar */}
+              {pullTasks[activePullKey].status === "pulling" && pullTasks[activePullKey].totalBytes && pullTasks[activePullKey].totalBytes > 0 && (
+                <div className="mb-3 p-2 rounded-lg bg-background/80">
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="font-medium">Overall progress</span>
+                    <span className="font-mono text-muted-foreground">
+                      {formatBytes(pullTasks[activePullKey].downloadedBytes || 0)} / {formatBytes(pullTasks[activePullKey].totalBytes || 0)}
+                    </span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-muted-foreground/20 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all duration-300"
+                      style={{ width: `${Math.min(100, ((pullTasks[activePullKey].downloadedBytes || 0) / (pullTasks[activePullKey].totalBytes || 1)) * 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-xs mt-1">
+                    <span className="font-mono text-muted-foreground">
+                      {Math.round(((pullTasks[activePullKey].downloadedBytes || 0) / (pullTasks[activePullKey].totalBytes || 1)) * 100)}%
+                    </span>
+                    {pullTasks[activePullKey].startTime && (() => {
+                      const elapsed = (Date.now() - pullTasks[activePullKey].startTime!) / 1000;
+                      const downloaded = pullTasks[activePullKey].downloadedBytes || 0;
+                      const total = pullTasks[activePullKey].totalBytes || 1;
+                      const speed = elapsed > 0 ? downloaded / elapsed : 0;
+                      const remaining = speed > 0 ? (total - downloaded) / speed : 0;
+                      return (
+                        <span className="font-mono text-muted-foreground">
+                          {speed > 0 ? formatBytes(speed) + "/s" : ""}
+                          {remaining > 0 && ` · ${remaining < 60 ? Math.round(remaining) + "s" : Math.round(remaining / 60) + "m"}`}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
               {pullTasks[activePullKey].layers.map((layer, i) => (
-                <div key={layer.id || i} className="flex items-center gap-2 py-1 text-xs font-mono border-b border-border/30 last:border-0">
+                <div key={layer.id || i} className="flex items-center gap-2 py-1.5 text-xs font-mono border-b border-border/30 last:border-0">
                   <div className="w-4 shrink-0">
                     {layer.status === "Downloading" ? (
                       <IconLoader2 className="h-3 w-3 animate-spin text-primary" stroke={2} />
-                    ) : layer.status === "Download complete" || layer.status === "Pull complete" || layer.status === "Already exists" ? (
+                    ) : layer.status === "Download complete" || layer.status === "Pull complete" || layer.status === "Already exists" || layer.status === "Verifying Checksum" ? (
                       <IconCheck className="h-3 w-3 text-green-500" stroke={2} />
                     ) : (
                       <div className="h-3 w-3 rounded-full border border-muted-foreground/30" />
                     )}
                   </div>
-                  <span className="truncate max-w-[120px]">{layer.id?.slice(0, 12) || "..."}</span>
-                  <span className="text-muted-foreground shrink-0">{layer.status}</span>
-                  {layer.progress && (
-                    <span className="text-muted-foreground shrink-0 ml-auto">{layer.progress}</span>
-                  )}
+                  <span className="truncate max-w-[100px]">{layer.id?.slice(0, 10) || "..."}</span>
+                  <span className="text-muted-foreground shrink-0 min-w-[60px]">{layer.status}</span>
+                  {layer.progress && layer.status === "Downloading" ? (
+                    <div className="flex items-center gap-2 ml-auto shrink-0">
+                      <div className="h-1.5 w-20 rounded-full bg-muted-foreground/20 overflow-hidden">
+                        {(() => {
+                          const m = layer.progress!.match(/([\d.]+)\s*(\w+)\/([\d.]+)\s*(\w+)/);
+                          if (m) {
+                            const curr = parseBytes(m[1], m[2]);
+                            const total = parseBytes(m[3], m[4]);
+                            const pct = total > 0 ? (curr / total) * 100 : 0;
+                            return <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, pct)}%` }} />;
+                          }
+                          return null;
+                        })()}
+                      </div>
+                      <span className="text-muted-foreground w-24 text-right">{layer.progress}</span>
+                    </div>
+                  ) : layer.progress ? (
+                    <span className="text-muted-foreground ml-auto shrink-0">{layer.progress}</span>
+                  ) : null}
                 </div>
               ))}
               {pullTasks[activePullKey].layers.length === 0 && pullTasks[activePullKey].status === "pulling" && (

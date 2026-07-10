@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { IconBell, IconPlus, IconTrash } from "@tabler/icons-react";
+import { IconBell, IconPlus, IconTrash, IconInfoCircle } from "@tabler/icons-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { EmptyState } from "@/components/empty-state";
 import { useWorkspaces } from "@/lib/workspace-store";
 import type { AlertRule } from "@/lib/types";
@@ -31,11 +37,42 @@ export const Route = createFileRoute("/_app/alerts")({
   head: () => ({ meta: [{ title: "Alerts · Stackhand" }] }),
 });
 
-const CONDS: { id: AlertRule["condition"]; label: string }[] = [
-  { id: "restarts>3", label: "Restart count > 3" },
-  { id: "cpu>80", label: "CPU > 80%" },
-  { id: "mem>80", label: "Memory > 80%" },
-  { id: "downtime>5m", label: "Downtime > 5m" },
+const CONDS: { id: AlertRule["condition"]; label: string; example: string }[] = [
+  { id: "restarts>3", label: "Restart count > 3", example: "e.g., container keeps crashing — fires when restarted more than 3 times in the window" },
+  { id: "cpu>80", label: "CPU > 80%", example: "e.g., a web server under high load — fires when CPU exceeds 80% persistently" },
+  { id: "mem>80", label: "Memory > 80%", example: "e.g., a database with a memory leak — fires when memory usage exceeds 80%" },
+  { id: "downtime>5m", label: "Downtime > 5m", example: "e.g., container stops unexpectedly — fires when container is down for more than 5 minutes" },
+];
+
+const EXAMPLES = [
+  {
+    name: "Monitor high CPU usage",
+    target: "any",
+    condition: "cpu>80" as AlertRule["condition"],
+    window: "5m",
+    desc: "Alert when any container exceeds 80% CPU for more than 5 minutes.",
+  },
+  {
+    name: "Detect memory leaks",
+    target: "any",
+    condition: "mem>80" as AlertRule["condition"],
+    window: "10m",
+    desc: "Fires when any container uses more than 80% memory for 10+ minutes.",
+  },
+  {
+    name: "Track restart loops",
+    target: "any",
+    condition: "restarts>3" as AlertRule["condition"],
+    window: "5m",
+    desc: "Detects crashed containers that keep restarting (useful for unstable services).",
+  },
+  {
+    name: "Database downtime alert",
+    target: "any",
+    condition: "downtime>5m" as AlertRule["condition"],
+    window: "5m",
+    desc: "Notifies when a database container is down for more than 5 minutes.",
+  },
 ];
 
 function AlertsPage() {
@@ -87,6 +124,44 @@ function AlertsPage() {
           <IconPlus className="mr-1.5 h-4 w-4" stroke={2} /> New rule
         </Button>
       </div>
+
+      {/* Examples Section */}
+      <Accordion type="single" collapsible className="rounded-lg border bg-card">
+        <AccordionItem value="examples">
+          <AccordionTrigger className="px-4 py-3 text-sm font-medium hover:no-underline">
+            <div className="flex items-center gap-2">
+              <IconInfoCircle className="h-4 w-4 text-muted-foreground" stroke={1.75} />
+              How to use alerts — examples
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="px-4 pb-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              {EXAMPLES.map((ex, i) => (
+                <Card key={i} className="p-3 cursor-pointer hover:bg-accent/50 transition-colors"
+                  onClick={() => {
+                    setName(ex.name);
+                    setTarget(ex.target);
+                    setCondition(ex.condition);
+                    setWin(ex.window);
+                    setOpen(true);
+                  }}
+                >
+                  <div className="font-mono text-sm font-medium">{ex.name}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">{ex.desc}</div>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    <Badge variant="secondary" className="font-mono text-[10px]">
+                      {CONDS.find((c) => c.id === ex.condition)?.label}
+                    </Badge>
+                    <Badge variant="outline" className="font-mono text-[10px]">
+                      window {ex.window}
+                    </Badge>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
 
       {alerts.length === 0 ? (
         <EmptyState
@@ -166,7 +241,14 @@ function AlertsPage() {
               <Select value={condition} onValueChange={(v) => setCondition(v as AlertRule["condition"])}>
                 <SelectTrigger className="mt-1 rounded-md font-mono"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {CONDS.map((c) => <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>)}
+                  {CONDS.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      <div>
+                        <span>{c.label}</span>
+                        <span className="ml-2 text-[10px] text-muted-foreground">{c.example}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

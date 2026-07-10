@@ -13,6 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import { api } from "@/lib/api";
+import { subscribeToContainerStats, stopContainerStats, useSocket } from "@/lib/socket";
 
 export const Route = createFileRoute("/_app/metrics")({
   component: MetricsPage,
@@ -31,11 +32,40 @@ function MetricsPage() {
   const [range, setRange] = useState<Range>("24h");
   const [containers, setContainers] = useState<any[]>([]);
   const [dockerStatus, setDockerStatus] = useState<any>(null);
-  const [liveData, setLiveData] = useState<{ ts: number; cpu: number; mem: number; net: number }[]>(
-    [],
-  );
+  const [liveData, setLiveData] = useState<{ ts: number; cpu: number; mem: number; net: number }[]>([]);
+  const [histData, setHistData] = useState<{ ts: number; cpu: number; mem: number; net: number }[]>([]);
+  const liveSubsRef = useRef<string[]>([]);
+  const histFetchRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isLive = range === "live";
+
+  useSocket({
+    onContainerStats: (data) => {
+      const cId = data.containerId;
+      const stats = data.stats;
+      const now = Date.now();
+      setLiveData((prev) => {
+        const next = [
+          ...prev,
+          {
+            ts: now,
+            cpu: Math.round((stats.cpu || 0) * 10) / 10,
+            mem: Math.round((stats.mem || 0) * 10) / 10,
+            net: stats.network
+              ? Math.round(
+                  (Object.values(stats.network) as any[]).reduce(
+                    (s: number, n: any) => s + (n.rx_bytes || 0) + (n.tx_bytes || 0),
+                    0,
+                  ) / (1024 * 1024) * 100
+                ) / 100
+              : 0,
+          },
+        ];
+        if (next.length > 120) next.splice(0, next.length - 120);
+        return next;
+      });
+    },
+  });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -43,26 +73,59 @@ function MetricsPage() {
         const [ctrs, status] = await Promise.all([api.listContainers(), api.dockerStatus()]);
         setContainers(ctrs as any);
         setDockerStatus(status);
+        const running = ctrs.filter((c: any) => c.status === "running") as any[];
+        running.forEach((c: any) => {
+          if (!liveSubsRef.current.includes(c.id)) {
+            subscribeToContainerStats(c.id);
+            liveSubsRef.current.push(c.id);
+          }
+        });
       } catch {}
     };
     fetchData();
-    const t = setInterval(fetchData, 15000);
+    const t = setInterval(fetchData, 10000);
     return () => clearInterval(t);
   }, []);
 
   useEffect(() => {
-    if (!isLive) return;
+    if (isLive) {
+      setLiveData([]);
+      const fetchLiveStats = async () => {
+        try {
+          const ctrs = await api.listContainers();
+          setContainers(ctrs as any);
+          const running = ctrs.filter((c: any) => c.status === "running") as any[];
+          running.forEach((c: any) => {
+            if (!liveSubsRef.current.includes(c.id)) {
+              subscribeToContainerStats(c.id);
+              liveSubsRef.current.push(c.id);
+            }
+          });
+        } catch {}
+      };
+      fetchLiveStats();
+      const t = setInterval(fetchLiveStats, 5000);
+      return () => {
+        clearInterval(t);
+        liveSubsRef.current.forEach((id) => stopContainerStats(id));
+        liveSubsRef.current = [];
+      };
+    }
+  }, [isLive]);
 
-    const fetchLiveStats = async () => {
+  useEffect(() => {
+    if (isLive) {
+      if (histFetchRef.current) clearInterval(histFetchRef.current);
+      return;
+    }
+    const fetchHistStats = async () => {
       try {
         const ctrs = await api.listContainers();
         setContainers(ctrs as any);
-
-        const running = ctrs.filter((c: any) => c.status === "running");
+        const running = ctrs.filter((c: any) => c.status === "running") as any[];
         let totalCpu = 0;
         let totalMem = 0;
         let totalNet = 0;
-
         await Promise.all(
           running.map(async (c: any) => {
             try {
@@ -78,9 +141,8 @@ function MetricsPage() {
             } catch {}
           }),
         );
-
         const now = Date.now();
-        setLiveData((prev) => {
+        setHistData((prev) => {
           const next = [
             ...prev,
             {
@@ -90,44 +152,17 @@ function MetricsPage() {
               net: Math.round((totalNet / (1024 * 1024)) * 100) / 100,
             },
           ];
-          if (next.length > 120) next.splice(0, next.length - 120);
+          if (next.length > 168) next.splice(0, next.length - 168);
           return next;
         });
       } catch {}
     };
-
-    fetchLiveStats();
-    const t = setInterval(fetchLiveStats, 5000);
-    return () => clearInterval(t);
+    fetchHistStats();
+    histFetchRef.current = setInterval(fetchHistStats, 60000);
+    return () => {
+      if (histFetchRef.current) clearInterval(histFetchRef.current);
+    };
   }, [isLive]);
-
-  useEffect(() => {
-    if (isLive) setLiveData([]);
-  }, [isLive]);
-
-  const hist = useMemo(() => {
-    if (isLive) return [];
-
-    const running = containers.filter((c: any) => c.status === "running");
-    const now = Date.now();
-    const hours = 168;
-    const arr: { ts: number; cpu: number; mem: number; net: number }[] = [];
-
-    for (let i = hours; i >= 0; i--) {
-      const t = now - i * 3600_000;
-      const baseCpu =
-        running.length > 0 ? Math.min(95, running.length * 8 + Math.random() * 15) : 0;
-      const baseMem =
-        running.length > 0 ? Math.min(90, 30 + running.length * 5 + Math.random() * 10) : 0;
-      arr.push({
-        ts: t,
-        cpu: Math.max(0, baseCpu),
-        mem: Math.max(0, baseMem),
-        net: Math.max(0, baseCpu * 0.3 + Math.random() * 10),
-      });
-    }
-    return arr;
-  }, [containers, isLive]);
 
   const filtered = useMemo(() => {
     if (isLive) {
@@ -136,9 +171,19 @@ function MetricsPage() {
         label: new Date(p.ts).toLocaleTimeString([], { minute: "2-digit", second: "2-digit" }),
       }));
     }
-
     const h = RANGES.find((r) => r.id === range)!.hours;
-    return hist.slice(-h - 1).map((p) => ({
+    const data = histData.length > 0 ? histData : [];
+    const slice = data.slice(-h - 1);
+    if (slice.length === 0) {
+      return Array.from({ length: 24 }).map((_, i) => ({
+        ts: Date.now() - (24 - i) * 3600_000,
+        cpu: 0,
+        mem: 0,
+        net: 0,
+        label: new Date(Date.now() - (24 - i) * 3600_000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      }));
+    }
+    return slice.map((p) => ({
       ...p,
       label:
         range === "1h"
@@ -147,13 +192,16 @@ function MetricsPage() {
             ? new Date(p.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
             : new Date(p.ts).toLocaleDateString([], { month: "short", day: "numeric" }),
     }));
-  }, [hist, range, liveData, isLive]);
+  }, [histData, range, liveData, isLive]);
 
   const runningCount = containers.filter((c: any) => c.status === "running").length;
 
   const avg = (k: "cpu" | "mem" | "net") =>
-    Math.round(filtered.reduce((s, p) => s + p[k], 0) / Math.max(filtered.length, 1));
-  const max = (k: "cpu" | "mem" | "net") => Math.round(Math.max(...filtered.map((p) => p[k])));
+    filtered.length > 0
+      ? Math.round(filtered.reduce((s, p) => s + p[k], 0) / filtered.length)
+      : 0;
+  const max = (k: "cpu" | "mem" | "net") =>
+    filtered.length > 0 ? Math.round(Math.max(...filtered.map((p) => p[k]))) : 0;
 
   const liveCurrent = isLive && liveData.length > 0 ? liveData[liveData.length - 1] : null;
 
@@ -194,15 +242,15 @@ function MetricsPage() {
       <div className="grid gap-3 sm:grid-cols-3">
         {isLive && liveCurrent ? (
           <>
-            <Stat title="CPU (current)" value={`${liveCurrent.cpu}%`} peak={`avg ${avg("cpu")}%`} />
+            <Stat title="CPU (current)" value={`${liveCurrent.cpu.toFixed(1)}%`} peak={`avg ${avg("cpu")}%`} />
             <Stat
               title="Memory (current)"
-              value={`${liveCurrent.mem}%`}
+              value={`${liveCurrent.mem.toFixed(1)}%`}
               peak={`avg ${avg("mem")}%`}
             />
             <Stat
               title="Network (current)"
-              value={`${liveCurrent.net} MB/s`}
+              value={`${liveCurrent.net.toFixed(2)} MB/s`}
               peak={`avg ${avg("net")} MB/s`}
             />
           </>
@@ -210,11 +258,7 @@ function MetricsPage() {
           <>
             <Stat title="CPU (avg)" value={`${avg("cpu")}%`} peak={`peak ${max("cpu")}%`} />
             <Stat title="Memory (avg)" value={`${avg("mem")}%`} peak={`peak ${max("mem")}%`} />
-            <Stat
-              title="Network (avg)"
-              value={`${avg("net")} MB/s`}
-              peak={`peak ${max("net")} MB/s`}
-            />
+            <Stat title="Network (avg)" value={`${avg("net")} MB/s`} peak={`peak ${max("net")} MB/s`} />
           </>
         )}
       </div>

@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { getSocket } from "@/lib/socket";
 
 export function LogsViewer({
   name,
@@ -14,50 +15,100 @@ export function LogsViewer({
   const [lines, setLines] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [streaming, setStreaming] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const socketRef = useRef<any>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const fetchInitialLogs = useCallback(async () => {
+    try {
+      if (containerId) {
+        const data = await api.containerLogs(containerId, 200);
+        if (data) {
+          const parsed = data.split("\n").filter(Boolean).slice(-200);
+          setLines(parsed);
+        }
+      } else if (stackId) {
+        const data = await api.getStackLogs(stackId, 200);
+        const logData = data.stdout || data.stderr || "";
+        const parsed = logData.split("\n").filter(Boolean).slice(-200);
+        setLines(parsed);
+      }
+      setLoading(false);
+    } catch (e: any) {
+      setError(e.message);
+      setLoading(false);
+    }
+  }, [containerId, stackId]);
 
   useEffect(() => {
-    let cancelled = false;
+    fetchInitialLogs();
+  }, [fetchInitialLogs]);
 
-    const fetchLogs = async () => {
-      try {
-        let logData = "";
-        if (containerId) {
-          const data = await api.containerLogs(containerId, 200);
-          logData = data;
-        } else if (stackId) {
-          const data = await api.getStackLogs(stackId, 200);
-          logData = data.stdout || data.stderr || "";
-        }
+  // For stack logs, use socket.io streaming
+  useEffect(() => {
+    if (!stackId) return;
+    const socket = getSocket();
+    socketRef.current = socket;
 
-        if (!cancelled) {
-          const parsed = logData
-            .split("\n")
-            .filter(Boolean)
-            .slice(-200);
-          setLines(parsed);
-          setLoading(false);
-          setError(null);
-        }
-      } catch (e: any) {
-        if (!cancelled) {
-          setError(e.message);
-          setLoading(false);
-        }
+    socket.emit("stack:logs", { stackId, tail: 200 });
+
+    const onLog = (data: { stackId: string; line: string }) => {
+      if (data.stackId === stackId) {
+        setStreaming(true);
+        setLines((prev) => {
+          const next = [...prev, data.line];
+          if (next.length > 500) next.splice(0, next.length - 500);
+          return next;
+        });
       }
     };
 
-    fetchLogs();
+    const onEnd = () => {
+      setStreaming(false);
+    };
 
-    // Poll for new logs
-    intervalRef.current = setInterval(fetchLogs, 3000);
+    socket.on("stack:logs", onLog);
+    socket.on("stack:logs:end", onEnd);
 
     return () => {
-      cancelled = true;
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      socket.emit("stack:logs:stop", { stackId });
+      socket.off("stack:logs", onLog);
+      socket.off("stack:logs:end", onEnd);
     };
-  }, [containerId, stackId]);
+  }, [stackId]);
+
+  // For container logs, use socket.io streaming
+  useEffect(() => {
+    if (!containerId) return;
+    const socket = getSocket();
+
+    socket.emit("container:logs", { containerId, tail: 200 });
+
+    const onLog = (data: { containerId: string; line: string }) => {
+      if (data.containerId === containerId) {
+        setStreaming(true);
+        setLines((prev) => {
+          const next = [...prev, data.line];
+          if (next.length > 500) next.splice(0, next.length - 500);
+          return next;
+        });
+      }
+    };
+
+    const onEnd = () => {
+      setStreaming(false);
+    };
+
+    socket.on("container:logs", onLog);
+    socket.on("container:logs:end", onEnd);
+
+    return () => {
+      socket.emit("container:logs:stop", { containerId });
+      socket.off("container:logs", onLog);
+      socket.off("container:logs:end", onEnd);
+    };
+  }, [containerId]);
 
   useEffect(() => {
     ref.current?.scrollTo({ top: ref.current.scrollHeight });
@@ -67,10 +118,10 @@ export function LogsViewer({
     <div className="flex flex-col overflow-hidden rounded-lg border bg-[#0b0f19] text-[#e2e8f0]">
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2 text-xs">
         <span className="relative flex h-2 w-2">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+          <span className={`absolute inline-flex h-full w-full rounded-full ${streaming ? "animate-ping bg-emerald-400 opacity-75" : "bg-slate-500"}`} />
+          <span className={`relative inline-flex h-2 w-2 rounded-full ${streaming ? "bg-emerald-500" : "bg-slate-500"}`} />
         </span>
-        <span className="font-medium">Live</span>
+        <span className="font-medium">{streaming ? "Live" : "Cached"}</span>
         <span className="text-mono text-white/50">{name}</span>
       </div>
       <div

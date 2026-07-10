@@ -177,6 +177,22 @@ export class StackService {
     return { message: `Stack "${stack.name}" deleted` };
   }
 
+  async composeFromYaml(yamlPath: string, yamlContent: string): Promise<{ message: string; containerId: string }> {
+    const dir = path.dirname(yamlPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(yamlPath, yamlContent, 'utf-8');
+    const result = await this.execComposeWithOutput(dir, 'up', ['-d']);
+    let containerId = '';
+    const lines = result.stdout.split('\n');
+    for (const line of lines) {
+      const m = line.match(/^Container\s+(\S+)\s+Created$/);
+      if (m) containerId = m[1];
+    }
+    return { message: 'Container spun from YAML', containerId };
+  }
+
   async composeUp(id: string): Promise<{ stdout: string; stderr: string }> {
     const stack = await this.prisma.stack.findUnique({ where: { id } });
     if (!stack) throw new NotFoundException('Stack not found');
