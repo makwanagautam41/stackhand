@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { createPrismaClientOptions } from '../src/prisma/prisma-client';
 import * as os from 'os';

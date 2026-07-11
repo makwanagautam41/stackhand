@@ -89,7 +89,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
-  const port = process.env.PORT ?? 4000;
+  const port = process.env.PORT ?? 22443;
   const host = getBackendHost();
 
   // Graceful shutdown

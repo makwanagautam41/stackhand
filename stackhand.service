@@ -8,8 +8,9 @@ Type=simple
 User=%i
 WorkingDirectory=/home/gautam-makwana/Workspace/stackhand
 Environment=NODE_ENV=production
+EnvironmentFile=/home/gautam-makwana/Workspace/stackhand/.env
 ExecStartPre=/usr/bin/npm run build --if-present
-ExecStart=/usr/bin/node dist/src/main.js
+ExecStart=/usr/bin/bash /home/gautam-makwana/Workspace/stackhand/scripts/start-production.sh
 Restart=always
 RestartSec=5
 StandardOutput=append:stackhand-api.log
