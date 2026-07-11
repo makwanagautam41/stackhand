@@ -43,6 +43,7 @@ import {
 import { StatusBadge } from "@/components/status-badge";
 import { LogsViewer } from "@/components/logs-viewer";
 import { api } from "@/lib/api";
+import { useWorkspaces } from "@/lib/workspace-store";
 import { emitSync, onSync, SYNC_EVENTS } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/containers")({
@@ -66,6 +67,7 @@ interface DockerContainer {
 }
 
 function ContainersPage() {
+  const { current } = useWorkspaces();
   const [containers, setContainers] = useState<DockerContainer[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -80,7 +82,7 @@ function ContainersPage() {
     if (!silent) setLoading(true);
     else setRefreshing(true);
     try {
-      const data = await api.listContainers();
+      const data = await api.listContainers(current?.id);
       setContainers(data as any);
     } catch (e: any) {
       if (!silent) toast.error(`Failed to load containers: ${e.message}`);
@@ -98,7 +100,7 @@ function ContainersPage() {
       if (intervalRef.current) clearInterval(intervalRef.current);
       unsub();
     };
-  }, []);
+  }, [current?.id]);
 
   const filtered = useMemo(() => {
     return containers.filter((c) => {

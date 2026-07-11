@@ -14,10 +14,14 @@ async function main() {
     return;
   }
 
-  // Use the real home directory — falls back to DEFAULT_WORKSPACE_ROOT env var if set
-  const defaultRoot = process.env.DEFAULT_WORKSPACE_ROOT || path.join(os.homedir(), 'stacks');
+  const isDev = process.env.NODE_ENV === 'development';
 
-  // Ensure the directory exists
+  // Development: use project-local directory
+  // Production: use DEFAULT_WORKSPACE_ROOT from .env, or fall back to ~/stacks
+  const defaultRoot = isDev
+    ? path.resolve(process.cwd(), 'workspaces-data', 'dev-workspace')
+    : process.env.DEFAULT_WORKSPACE_ROOT || path.join(os.homedir(), 'stacks');
+
   if (!fs.existsSync(defaultRoot)) {
     fs.mkdirSync(defaultRoot, { recursive: true });
     console.log(`Created directory: ${defaultRoot}`);
@@ -25,7 +29,7 @@ async function main() {
 
   const ws = await prisma.workspace.create({
     data: {
-      name: 'Default Workspace',
+      name: isDev ? 'Development Workspace' : 'Default Workspace',
       description: 'Auto-created on first run',
       color: '#6366f1',
       icon: 'Server',
@@ -33,7 +37,8 @@ async function main() {
     },
   });
 
-  console.log(`Seeded workspace: ${ws.id} (${ws.name}) → ${defaultRoot}`);
+  const mode = isDev ? 'development' : 'production';
+  console.log(`[${mode}] Seeded workspace: ${ws.id} (${ws.name}) → ${defaultRoot}`);
 }
 
 main()

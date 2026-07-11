@@ -44,7 +44,7 @@ function DashboardPage() {
     const fetchLive = async () => {
       try {
         const [containers, images, status] = await Promise.all([
-          api.listContainers(),
+          api.listContainers(current?.id),
           api.listImages(),
           api.dockerStatus(),
         ]);

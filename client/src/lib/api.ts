@@ -286,8 +286,9 @@ export const api = {
   },
 
   // ---- Containers ----
-  async listContainers() {
-    const data = await request<any[]>("/containers");
+  async listContainers(workspaceId?: string) {
+    const query = workspaceId ? `?workspaceId=${workspaceId}` : "";
+    const data = await request<any[]>(`/containers${query}`);
     return data.map((c: any) => ({
       id: c.id,
       name: c.name,

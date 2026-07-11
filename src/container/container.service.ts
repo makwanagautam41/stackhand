@@ -1,27 +1,48 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import Dockerode from 'dockerode';
 import { getDockerClient } from '../common/docker-client';
+import { PrismaService } from '../prisma/prisma.service';
 import * as cp from 'child_process';
 
 const docker = getDockerClient();
 
 @Injectable()
 export class ContainerService {
-  async findAll() {
+  constructor(private prisma: PrismaService) {}
+
+  async findAll(workspaceId?: string) {
     const containers = await docker.listContainers({ all: true });
-    return containers.map((c) => ({
-      id: c.Id,
-      name: c.Names?.[0]?.replace(/^\//, '') ?? '',
-      image: c.Image,
-      status: c.State ?? 'unknown',
-      ports: (c.Ports ?? []).map((p) => ({
-        host: p.PublicPort,
-        container: p.PrivatePort,
-        protocol: p.Type ?? 'tcp',
-      })),
-      created: c.Created,
-      state: c.Status,
-    }));
+
+    // If filtering by workspace, get the stack IDs for that workspace
+    let allowedDockerIds: Set<string> | null = null;
+    if (workspaceId) {
+      const stacks = await this.prisma.stack.findMany({
+        where: { workspaceId },
+        include: { containers: { select: { dockerId: true } } },
+      });
+      allowedDockerIds = new Set<string>();
+      for (const s of stacks) {
+        for (const c of s.containers) {
+          allowedDockerIds.add(c.dockerId);
+        }
+      }
+    }
+
+    return containers
+      .filter((c) => !allowedDockerIds || allowedDockerIds.has(c.Id))
+      .map((c) => ({
+        id: c.Id,
+        name: c.Names?.[0]?.replace(/^\//, '') ?? '',
+        image: c.Image,
+        status: c.State ?? 'unknown',
+        ports: (c.Ports ?? []).map((p) => ({
+          host: p.PublicPort,
+          container: p.PrivatePort,
+          protocol: p.Type ?? 'tcp',
+        })),
+        created: c.Created,
+        state: c.Status,
+      }));
   }
 
   async findOne(id: string) {
