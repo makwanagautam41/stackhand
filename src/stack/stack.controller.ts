@@ -62,8 +62,12 @@ export class StackController {
 
   @Post('stacks/from-yaml')
   @ApiOperation({ summary: 'docker compose up from raw YAML path' })
-  composeFromYaml(@Body('yamlPath') yamlPath: string, @Body('yamlContent') yamlContent: string) {
-    return this.service.composeFromYaml(yamlPath, yamlContent);
+  composeFromYaml(
+    @Body('yamlPath') yamlPath: string,
+    @Body('yamlContent') yamlContent: string,
+    @Body('workspaceId') workspaceId?: string,
+  ) {
+    return this.service.composeFromYaml(yamlPath, yamlContent, workspaceId);
   }
 
   @Post('stacks/:id/up')

@@ -57,7 +57,12 @@ async function bootstrap() {
       : ['log', 'error', 'warn', 'debug', 'verbose'],
   });
 
-  app.use(compression());
+  app.use(compression({
+    filter: (req, res) => {
+      if (req.url?.includes('/ollama/chat/stream')) return false;
+      return compression.filter(req, res);
+    },
+  }));
   app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
   app.useWebSocketAdapter(new IoAdapter(app));
   app.use(new RequestLoggerMiddleware().use);

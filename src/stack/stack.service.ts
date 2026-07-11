@@ -177,20 +177,71 @@ export class StackService {
     return { message: `Stack "${stack.name}" deleted` };
   }
 
-  async composeFromYaml(yamlPath: string, yamlContent: string): Promise<{ message: string; containerId: string }> {
+  async composeFromYaml(yamlPath: string, yamlContent: string, workspaceId?: string): Promise<{ message: string; containerId: string }> {
     const dir = path.dirname(yamlPath);
     const baseName = path.basename(yamlPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
     fs.writeFileSync(yamlPath, yamlContent, 'utf-8');
-    const result = await this.execComposeWithOutput(dir, 'up', ['-d'], baseName);
+    await this.execComposeWithOutput(dir, 'up', ['-d'], baseName);
+
+    // Try to find the actual container id from docker after compose up
     let containerId = '';
-    const lines = result.stdout.split('\n');
-    for (const line of lines) {
-      const m = line.match(/^Container\s+(\S+)\s+Created$/);
-      if (m) containerId = m[1];
+    try {
+      const projectName = path.basename(dir).toLowerCase();
+      const dockerContainers = await docker.listContainers({ all: true });
+      const match = dockerContainers.find((c) => {
+        const proj = c.Labels?.['com.docker.compose.project'] ?? '';
+        return proj === projectName;
+      });
+      if (match) containerId = match.Id;
+    } catch {}
+
+    // Create a stack record and sync containers so they appear in the UI
+    if (workspaceId) {
+      try {
+        const ws = await this.ensureWorkspace(workspaceId);
+        const stackName = path.basename(yamlPath).replace(/\.(yml|yaml)$/, '');
+        const existing = await this.prisma.stack.findFirst({
+          where: { folderPath: dir, workspaceId },
+        });
+        if (!existing) {
+          const stack = await this.prisma.stack.create({
+            data: {
+              name: stackName,
+              workspaceId,
+              folderPath: dir,
+              status: 'running',
+            },
+          });
+          await this.syncContainers(stack);
+          await this.activity.log(workspaceId, 'start', `container spun from YAML: ${stackName}`);
+          // If we didn't get a containerId from docker labels, try from synced containers
+          if (!containerId) {
+            const synced = await this.prisma.container.findFirst({
+              where: { stackId: stack.id },
+            });
+            if (synced) containerId = synced.dockerId;
+          }
+        } else {
+          await this.syncContainers(existing);
+          await this.prisma.stack.update({
+            where: { id: existing.id },
+            data: { status: 'running' },
+          });
+          if (!containerId) {
+            const synced = await this.prisma.container.findFirst({
+              where: { stackId: existing.id },
+            });
+            if (synced) containerId = synced.dockerId;
+          }
+        }
+      } catch (e) {
+        // Non-critical: container still runs in docker even if DB sync fails
+      }
     }
+
     return { message: 'Container spun from YAML', containerId };
   }
 

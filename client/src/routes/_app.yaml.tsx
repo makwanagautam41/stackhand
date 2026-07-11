@@ -454,7 +454,7 @@ function YamlPage() {
                   setSpinModify("direct");
                   if (!spinYaml || !current) return;
                   try {
-                    await api.composeUpFromYaml(spinYaml.path, spinYaml.content);
+                    await api.composeUpFromYaml(spinYaml.path, spinYaml.content, current.id);
                     toast.success("Container spun from " + spinYaml.name);
                     setSpinYaml(null);
                     setSpinModify("ask");
@@ -486,7 +486,7 @@ function YamlPage() {
                     const folderName = serviceName;
                     const folderPath = current.rootFolder + "/" + folderName;
                     await api.writeFile(folderPath + "/" + spinYaml.name, spinModifiedContent);
-                    await api.composeUpFromYaml(folderPath + "/" + spinYaml.name, spinModifiedContent);
+                    await api.composeUpFromYaml(folderPath + "/" + spinYaml.name, spinModifiedContent, current.id);
                     toast.success("Modified container spun from new folder");
                     setSpinYaml(null);
                     setSpinModify("ask");
