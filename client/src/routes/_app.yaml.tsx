@@ -1,3 +1,4 @@
+import { uuid } from "@/lib/utils";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -173,7 +174,7 @@ function YamlPage() {
     try {
       const result = await api.backupWorkspace(current.id);
       await recordBackup({
-        id: crypto.randomUUID(),
+        id: uuid(),
         workspaceId: current.id,
         filePath: selected.path,
         location: result.path,

@@ -1,3 +1,4 @@
+import { uuid } from "@/lib/utils";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -97,7 +98,7 @@ function StackDetail() {
 
   const saveYaml = (v: string) => {
     const version: YamlVersion = {
-      id: crypto.randomUUID(),
+      id: uuid(),
       ts: new Date().toISOString(),
       message: "edit via YAML editor",
       content: stack.yaml,
@@ -267,7 +268,7 @@ function StackDetail() {
             versions={history}
             onRevert={(v) => {
               const bak: YamlVersion = {
-                id: crypto.randomUUID(),
+                id: uuid(),
                 ts: new Date().toISOString(),
                 message: "before revert",
                 content: stack.yaml,

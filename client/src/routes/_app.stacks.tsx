@@ -1,3 +1,4 @@
+import { uuid } from "@/lib/utils";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -968,7 +969,7 @@ function NewStackDialog({
             onClick={() => {
               const finalName = name.trim();
               const stack: Stack = {
-                id: crypto.randomUUID(),
+                id: uuid(),
                 workspaceId: "",
                 name: finalName,
                 yamlPath: `${folder.replace(/\/$/, "")}/${finalName}/docker-compose.yml`,
@@ -976,7 +977,7 @@ function NewStackDialog({
                 services: [service || "app"],
                 containers: [
                   {
-                    id: crypto.randomUUID(),
+                    id: uuid(),
                     name: finalName,
                     image: image || `${service || "app"}:latest`,
                     status: "stopped",

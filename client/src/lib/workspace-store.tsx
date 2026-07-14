@@ -22,6 +22,7 @@ import type {
 } from "./types";
 import { api } from "./api";
 import { getStoredToken, setToken } from "./api";
+import { uuid } from "./utils";
 
 export { getStoredToken, setToken };
 
@@ -252,7 +253,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const pushActivity = useCallback(
     (workspaceId: string, ev: Omit<ActivityEvent, "id" | "ts">) => {
-      const id = crypto.randomUUID();
+      const id = uuid();
       const full: ActivityEvent = {
         ...ev,
         id,
@@ -493,7 +494,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           } else {
             n.name = `${n.name}-copy`;
           }
-          n.id = crypto.randomUUID();
+          n.id = uuid();
           n.path = `${parentPath}/${n.name}`;
           n.children?.forEach((c) => stamp(c, n.path, false));
         };
@@ -522,7 +523,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         targetParentPath = parent.path;
         parent.children ??= [];
         const child: YamlFile = {
-          id: crypto.randomUUID(),
+          id: uuid(),
           name,
           path: `${parent.path}/${name}`,
           isDir,

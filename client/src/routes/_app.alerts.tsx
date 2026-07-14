@@ -1,3 +1,4 @@
+import { uuid } from "@/lib/utils";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -90,7 +91,7 @@ function AlertsPage() {
 
   const create = () => {
     const a: AlertRule = {
-      id: crypto.randomUUID(),
+      id: uuid(),
       name: name.trim() || "Untitled alert",
       target: target || containers[0] || "any",
       condition,

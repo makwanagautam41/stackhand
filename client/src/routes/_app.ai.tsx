@@ -1,3 +1,4 @@
+import { uuid } from "@/lib/utils";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { toast } from "sonner";
@@ -151,7 +152,7 @@ function AIPage() {
     const lineCount = text.split("\n").length;
     if (text.length > PASTE_CHAR_THRESHOLD || lineCount > PASTE_LINE_THRESHOLD) {
       e.preventDefault();
-      setAttachments((prev) => [...prev, { id: crypto.randomUUID(), content: text }]);
+      setAttachments((prev) => [...prev, { id: uuid(), content: text }]);
     }
   }, []);
 
@@ -404,7 +405,7 @@ function AIPage() {
   const createSession = useCallback(async () => {
     if (!current?.id) return null;
     let session: ChatSession = {
-      id: crypto.randomUUID(),
+      id: uuid(),
       name: "New chat",
       messages: [],
       createdAt: new Date().toISOString(),
@@ -518,7 +519,7 @@ function AIPage() {
                 messages: [
                   ...s.messages,
                   {
-                    id: msgId ?? crypto.randomUUID(),
+                    id: msgId ?? uuid(),
                     role: "assistant",
                     content: finalContent,
                     ts: new Date().toISOString(),
@@ -566,7 +567,7 @@ function AIPage() {
       const isFirst = sessionMessages.length === 0;
 
       const userMsg: ChatMessage = {
-        id: crypto.randomUUID(),
+        id: uuid(),
         role: "user",
         content: text.trim(),
         ts: new Date().toISOString(),
@@ -703,7 +704,7 @@ function AIPage() {
                   messages: [
                     ...s.messages,
                     {
-                      id: msgId ?? crypto.randomUUID(),
+                      id: msgId ?? uuid(),
                       role: "assistant",
                       content: fullContent,
                       ts: new Date().toISOString(),

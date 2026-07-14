@@ -1,3 +1,4 @@
+import { uuid } from "@/lib/utils";
 import { createFileRoute } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
@@ -57,7 +58,7 @@ function EnvPage() {
   const doImport = () => {
     const vars = parseEnvContent(importText);
     const entry: EnvFileEntry = {
-      id: crypto.randomUUID(),
+      id: uuid(),
       path: importName,
       vars,
     };
@@ -79,7 +80,7 @@ function EnvPage() {
       const text = ev.target?.result as string;
       const vars = parseEnvContent(text);
       const entry: EnvFileEntry = {
-        id: crypto.randomUUID(),
+        id: uuid(),
         path: file.name,
         vars,
       };
